@@ -16,6 +16,23 @@ BASE="${DREAM_BASE:-main}"
 
 mkdir -p "$STATE_DIR"; touch "$PROCESSED"
 
+# Settings that shouldn't be committed (like SLACK_WEBHOOK_URL) live in .env.
+# tr strips Windows line endings, which would otherwise end up inside the values.
+if [ -f .env ]; then
+  set -a; . <(tr -d '\r' < .env); set +a
+fi
+
+# Post a message to Slack (AI-15). Does nothing if SLACK_WEBHOOK_URL isn't set.
+# A failed post only prints a warning: it never stops the dreaming pass.
+slack() {
+  [ -n "${SLACK_WEBHOOK_URL:-}" ] || return 0
+  local payload
+  payload="$(node -e 'process.stdout.write(JSON.stringify({text: process.argv[1]}))' "$1")"
+  curl -fsS -m 20 -X POST -H 'Content-Type: application/json' \
+    --data "$payload" "$SLACK_WEBHOOK_URL" > /dev/null \
+    || echo "Slack post failed; the dreaming result is unaffected." >&2
+}
+
 # Lowercase, forward slashes, no trailing slash: so C:\Users\X and c:/Users/X/ match.
 norm() { printf '%s' "$1" | sed 's#\\\\#/#g; s#\\#/#g; s#/*$##' | tr '[:upper:]' '[:lower:]'; }
 want="$(norm "$REPO_WIN")"
@@ -32,6 +49,7 @@ done < <(find "$SESSIONS_ROOT" -name '*.jsonl' -print0 2>/dev/null)
 
 if [ ${#new[@]} -eq 0 ]; then
   echo "No new dream-lab sessions. Nothing to dream about."
+  slack ":zzz: Dreaming $TODAY: no new sessions, nothing to dream about."
   exit 0
 fi
 echo "Dreaming over ${#new[@]} session(s)."
@@ -65,6 +83,8 @@ outside="$(git status --porcelain | grep -v ' memory/' || true)"
 if [ -n "$outside" ]; then
   echo "Dreaming changed files outside memory/. Not committing. Review these:" >&2
   echo "$outside" >&2
+  slack ":warning: Dreaming $TODAY stopped: it changed files outside memory/. Nothing committed; left on \`$BRANCH\` for review.
+\`\`\`$outside\`\`\`"
   exit 1
 fi
 
@@ -72,8 +92,11 @@ if [ -n "$(git status --porcelain memory/)" ]; then
   git add memory/
   git commit -q -m "Dreaming pass $TODAY (${#new[@]} sessions)"
   echo "Committed on $BRANCH."
+  slack ":crescent_moon: Dreaming $TODAY: ${#new[@]} session(s), committed on \`$BRANCH\`.
+\`\`\`$(git show --stat --format= HEAD)\`\`\`"
 else
   echo "Dreaming made no memory changes."
+  slack ":crescent_moon: Dreaming $TODAY: ${#new[@]} session(s), no memory changes."
 fi
 
 # 5. Mark these sessions done only after a successful run.
