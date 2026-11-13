@@ -1,0 +1,157 @@
+{
+  "groups": {
+    "learn": "Run first, so memory has something to learn. Each breaks one shop house rule.",
+    "similar": "Same house rule broken in a different place (see similar_to). Memory should help most.",
+    "new": "Ordinary bugs in the shop code that no house rule covers.",
+    "different": "Standalone code with no shop. Memory should stay out of the way."
+  },
+  "tasks": [
+    {
+      "id": "01-coupon-discount",
+      "group": "learn",
+      "title": "Coupon discount is far too big",
+      "path": "tasks/01-coupon-discount",
+      "similar_to": null
+    },
+    {
+      "id": "02-catalog-prices",
+      "group": "learn",
+      "title": "Some prices are a kobo short",
+      "path": "tasks/02-catalog-prices",
+      "similar_to": null
+    },
+    {
+      "id": "03-coupon-expiry",
+      "group": "learn",
+      "title": "Valid coupons are rejected",
+      "path": "tasks/03-coupon-expiry",
+      "similar_to": null
+    },
+    {
+      "id": "04-cart-remove-sku",
+      "group": "learn",
+      "title": "Can't remove items typed in lower case",
+      "path": "tasks/04-cart-remove-sku",
+      "similar_to": null
+    },
+    {
+      "id": "05-vat-rounding",
+      "group": "learn",
+      "title": "VAT is sometimes a kobo short",
+      "path": "tasks/05-vat-rounding",
+      "similar_to": null
+    },
+    {
+      "id": "06-missing-product",
+      "group": "learn",
+      "title": "Unknown products crash with a confusing error",
+      "path": "tasks/06-missing-product",
+      "similar_to": null
+    },
+    {
+      "id": "07-member-shipping-discount",
+      "group": "similar",
+      "title": "Member shipping discount makes shipping negative",
+      "path": "tasks/07-member-shipping-discount",
+      "similar_to": "01-coupon-discount"
+    },
+    {
+      "id": "08-partial-refund",
+      "group": "similar",
+      "title": "Partial refunds are a kobo short",
+      "path": "tasks/08-partial-refund",
+      "similar_to": "02-catalog-prices"
+    },
+    {
+      "id": "09-daily-sales-report",
+      "group": "similar",
+      "title": "Today's sales report shows zero",
+      "path": "tasks/09-daily-sales-report",
+      "similar_to": "03-coupon-expiry"
+    },
+    {
+      "id": "10-order-lookup",
+      "group": "similar",
+      "title": "Orders can't be found by lower-case ID",
+      "path": "tasks/10-order-lookup",
+      "similar_to": "04-cart-remove-sku"
+    },
+    {
+      "id": "11-loyalty-points",
+      "group": "similar",
+      "title": "Loyalty points are sometimes one short",
+      "path": "tasks/11-loyalty-points",
+      "similar_to": "05-vat-rounding"
+    },
+    {
+      "id": "12-cart-remove-all",
+      "group": "new",
+      "title": "Removing every unit leaves an empty line in the cart",
+      "path": "tasks/12-cart-remove-all",
+      "similar_to": null
+    },
+    {
+      "id": "13-last-items-in-stock",
+      "group": "new",
+      "title": "Can't buy the last items in stock",
+      "path": "tasks/13-last-items-in-stock",
+      "similar_to": null
+    },
+    {
+      "id": "14-price-display",
+      "group": "new",
+      "title": "Prices display wrongly",
+      "path": "tasks/14-price-display",
+      "similar_to": null
+    },
+    {
+      "id": "15-shipping-tiers",
+      "group": "new",
+      "title": "A 1 kg parcel is charged the heavy rate",
+      "path": "tasks/15-shipping-tiers",
+      "similar_to": null
+    },
+    {
+      "id": "16-top-products-ties",
+      "group": "new",
+      "title": "Top products report orders ties randomly",
+      "path": "tasks/16-top-products-ties",
+      "similar_to": null
+    },
+    {
+      "id": "17-roman-numerals",
+      "group": "different",
+      "title": "Roman numerals ending in a subtraction are wrong",
+      "path": "tasks/17-roman-numerals",
+      "similar_to": null
+    },
+    {
+      "id": "18-lru-cache",
+      "group": "different",
+      "title": "LRU cache evicts an item that was just used",
+      "path": "tasks/18-lru-cache",
+      "similar_to": null
+    },
+    {
+      "id": "19-csv-quotes",
+      "group": "different",
+      "title": "Quoted CSV fields lose their quote marks",
+      "path": "tasks/19-csv-quotes",
+      "similar_to": null
+    },
+    {
+      "id": "20-merge-intervals",
+      "group": "different",
+      "title": "Touching intervals aren't merged",
+      "path": "tasks/20-merge-intervals",
+      "similar_to": null
+    },
+    {
+      "id": "21-word-wrap",
+      "group": "different",
+      "title": "Word wrap makes lines one character too long",
+      "path": "tasks/21-word-wrap",
+      "similar_to": null
+    }
+  ]
+}
