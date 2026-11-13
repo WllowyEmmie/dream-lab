@@ -17,6 +17,8 @@ MERGE_AT="${DREAM_MERGE_THRESHOLD:-4}"   # auto-merge when the judge scores >= t
 JUDGE_LOG="$STATE_DIR/judge-log.tsv"
 BUDGET="${DREAM_MEMORY_BUDGET:-2000}"    # max tokens for all of memory/ (AI-18)
 SIZE_LOG="$STATE_DIR/memory-size.tsv"
+USAGE_CSV="$STATE_DIR/usage.csv"                      # tokens and cost per session (AI-21)
+RUN_DIR="$STATE_DIR/sessions/$(date +%Y%m%d-%H%M%S)"  # this run's own Pi sessions
 
 mkdir -p "$STATE_DIR"; touch "$PROCESSED"
 
@@ -75,20 +77,26 @@ else
   git switch -q -c "$BRANCH" "$BASE"
 fi
 
-# 3. Run Pi once. --no-session: the dreaming run itself isn't saved, so it never
-#    shows up as a "new session" next time.
+# 3. Run Pi once. Its session is saved in this run's own folder under .dream-state,
+#    not in Pi's main sessions folder: that keeps its token usage on record, but it
+#    never shows up as a new dream-lab session to dream over.
 list=""
 for f in "${new[@]}"; do
   p="$(cygpath -m "$f" 2>/dev/null || printf '%s' "$f")"   # Windows path Pi can read
   list+="- $p"$'\n'
 done
 size_before="$(mem_tokens)"
-pi -p --no-session @prompts/dream.md "TODAY: $TODAY
+pi -p --session-dir "$RUN_DIR/dream" @prompts/dream.md "TODAY: $TODAY
 MEMORY_BUDGET: $BUDGET tokens
 MEMORY_SIZE: $size_before tokens
 
 Session transcripts to consolidate:
 $list"
+
+# Record tokens and cost: the task sessions being dreamed over, and the dream run.
+usage_tasks="$(node scripts/usage.mjs --kind task --date "$TODAY" --out "$USAGE_CSV" "${new[@]}")"
+usage_dream="$(node scripts/usage.mjs --kind dream --date "$TODAY" --out "$USAGE_CSV" "$RUN_DIR"/dream/*.jsonl)"
+echo "Usage: tasks $usage_tasks; dreaming $usage_dream"
 
 # 4. Only memory/ may change. Anything else: stop and leave it for a human.
 outside="$(git status --porcelain | grep -v ' memory/' || true)"
@@ -122,9 +130,11 @@ if [ -n "$(git status --porcelain memory/)" ]; then
     git diff --stat "$BASE...$BRANCH"
     echo; echo "Diff of memory/:"
     git diff "$BASE...$BRANCH" -- memory/
-  } | pi -p --no-session --tools read,grep,find,ls @.pi/agents/memory-reviewer.md \
+  } | pi -p --session-dir "$RUN_DIR/judge" --tools read,grep,find,ls @.pi/agents/memory-reviewer.md \
       "You are memory-reviewer. The dreaming branch $BRANCH is checked out. Its diff is above; you can't run commands, so judge from the diff and by reading files. Reply in the exact SCORE format from your instructions." \
       > "$review_file" || true
+
+  usage_judge="$(node scripts/usage.mjs --kind judge --date "$TODAY" --out "$USAGE_CSV" "$RUN_DIR"/judge/*.jsonl)"
 
   # Pull the four numbers out of the "SCORE: n | accuracy n | deduplication n | scope n" line.
   score_line="$(grep -m1 -E '^SCORE: [1-5]' "$review_file" || true)"
@@ -160,10 +170,12 @@ if [ -n "$(git status --porcelain memory/)" ]; then
   [ "$over_budget" = "no" ] || verdict=":warning: memory is over budget ($size_after > $BUDGET tokens); left on \`$BRANCH\` for review"
   slack ":crescent_moon: Dreaming $TODAY: ${#new[@]} session(s), committed on \`$BRANCH\`.
 Judge: *$score*/5 (accuracy $acc, dedup $dedup, scope $scope). Memory: $size_before -> $size_after tokens (budget $BUDGET). $verdict
+Usage: tasks $usage_tasks · dreaming $usage_dream · judge $usage_judge
 \`\`\`$stat\`\`\`"
 else
   echo "Dreaming made no memory changes."
-  slack ":crescent_moon: Dreaming $TODAY: ${#new[@]} session(s), no memory changes."
+  slack ":crescent_moon: Dreaming $TODAY: ${#new[@]} session(s), no memory changes.
+Usage: tasks $usage_tasks · dreaming $usage_dream"
 fi
 
 # 5. Mark these sessions done only after a successful run.
