@@ -10,6 +10,8 @@ Your job is to turn what recent sessions learned into tidy, accurate memory.
   Use them to check what actually happened; don't copy them into memory.
 - The repo's code and tests: the source of truth.
 - Today's date, given after this prompt as `TODAY: YYYY-MM-DD`.
+- The memory budget, given as `MEMORY_BUDGET: <n> tokens`, and the current size
+  as `MEMORY_SIZE: <n> tokens`. Count roughly 4 characters per token.
 
 ## Hard rules
 
@@ -55,7 +57,18 @@ Then empty `inbox.md` back to its header (the title and the two lines under it).
 Remove a note when any of these is true:
 - It's about a file, function or command that no longer exists.
 - It duplicates another note.
-- Its `last used` date is more than 30 days before TODAY and no recent session used it.
+- Its `last used` date is more than 14 days before TODAY and no recent session used it.
+
+### 4b. Stay within the budget
+
+When you finish, all files in `memory/` together must fit in MEMORY_BUDGET
+(about 4 characters per token). Memory has to compress, not grow:
+1. Merge notes that say related things into one shorter note.
+2. Shorten wording: keep the rule, the file and the fix; drop explanations.
+3. Only if it still doesn't fit, remove the notes with the oldest `last used`
+   dates first, even if they're younger than 14 days.
+Never drop a note a recent session used just to make room for a new one;
+compress something else instead.
 
 ### 5. Index
 
@@ -71,4 +84,5 @@ VERIFIED: <n> kept, <n> corrected, <n> dropped
 ORGANIZED: <n> moved from inbox, <n> merged
 ENRICHED: <n> notes made more specific
 FORGOT: <n> removed (<reason for each>)
+BUDGET: <n> of <budget> tokens
 ```
