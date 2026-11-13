@@ -15,7 +15,9 @@ Eval tasks live in `tasks/`: each is broken code with a failing test.
 
 ## Subagents
 
-- After changing code, ask `code-reviewer` to review the change.
+- After changing code, run `git diff` and the task's test yourself, then ask
+  `code-reviewer` to review, pasting both outputs into the request. Reviewers are
+  read-only: they can read files but can't run commands.
 - Give anything it reports to `fixer`, then ask `code-reviewer` again.
   Repeat until it reports nothing. You run this loop: subagents can't call each other.
 - `memory-reviewer` is only for reviewing dreaming diffs, not task code.
