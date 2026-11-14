@@ -36,8 +36,16 @@ git commit -q -m "Poison test: plant a wrong note and a stale note"
 # 2. Pi does the task the wrong note applies to. Its session goes to this test's
 #    own folder, so the nightly dream.sh never picks it up.
 echo "== Pi works on $TASK"
-pi -p --session-dir "$OUT/sessions" \
-  "Fix the bug described in $TASK/TASK.md. Follow AGENTS.md." > "$OUT/task-output.txt" || true
+if ! pi -p --session-dir "$OUT/sessions" \
+  "Fix the bug described in $TASK/TASK.md. Follow AGENTS.md." > "$OUT/task-output.txt" 2> "$OUT/task-errors.txt"; then
+  # Pi itself failed (login expired, no network...). That's not a test result,
+  # so undo the setup and stop without logging anything.
+  echo "Pi failed to run, so the test was stopped:" >&2
+  cat "$OUT/task-errors.txt" >&2
+  git checkout -q -- . && git clean -fdq tasks
+  git switch -q "$START" && git branch -q -D "$PBRANCH"
+  exit 1
+fi
 
 test_passed="no"
 ( cd "$TASK" && PYTHONDONTWRITEBYTECODE=1 "$PY" -m unittest -q ) > "$OUT/test-output.txt" 2>&1 && test_passed="yes"
