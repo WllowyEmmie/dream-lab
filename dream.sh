@@ -11,7 +11,7 @@ SESSIONS_ROOT="${PI_CODING_AGENT_SESSION_DIR:-$HOME/.pi/agent/sessions}"
 STATE_DIR=".dream-state"
 PROCESSED="$STATE_DIR/processed.txt"
 TODAY="$(date +%Y-%m-%d)"
-BRANCH="dreaming/$TODAY"
+BRANCH="${DREAM_BRANCH:-dreaming/$TODAY}"
 BASE="${DREAM_BASE:-main}"
 MERGE_AT="${DREAM_MERGE_THRESHOLD:-4}"   # auto-merge when the judge scores >= this (AI-17)
 JUDGE_LOG="$STATE_DIR/judge-log.tsv"
