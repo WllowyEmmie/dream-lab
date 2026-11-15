@@ -17,6 +17,7 @@ MERGE_AT="${DREAM_MERGE_THRESHOLD:-4}"   # auto-merge when the judge scores >= t
 JUDGE_LOG="$STATE_DIR/judge-log.tsv"
 BUDGET="${DREAM_MEMORY_BUDGET:-2000}"    # max tokens for all of memory/ (AI-18)
 SIZE_LOG="$STATE_DIR/memory-size.tsv"
+PI_FLAGS="${DREAM_PI_FLAGS:-}"                         # extra flags for every pi call
 USAGE_CSV="$STATE_DIR/usage.csv"                      # tokens and cost per session (AI-21)
 RUN_DIR="$STATE_DIR/sessions/$(date +%Y%m%d-%H%M%S)"  # this run's own Pi sessions
 
@@ -86,7 +87,7 @@ for f in "${new[@]}"; do
   list+="- $p"$'\n'
 done
 size_before="$(mem_tokens)"
-pi -p --session-dir "$RUN_DIR/dream" @prompts/dream.md "TODAY: $TODAY
+pi -p $PI_FLAGS --session-dir "$RUN_DIR/dream" @prompts/dream.md "TODAY: $TODAY
 MEMORY_BUDGET: $BUDGET tokens
 MEMORY_SIZE: $size_before tokens
 
@@ -130,7 +131,7 @@ if [ -n "$(git status --porcelain memory/)" ]; then
     git diff --stat "$BASE...$BRANCH"
     echo; echo "Diff of memory/:"
     git diff "$BASE...$BRANCH" -- memory/
-  } | pi -p --session-dir "$RUN_DIR/judge" --tools read,grep,find,ls @.pi/agents/memory-reviewer.md \
+  } | pi -p $PI_FLAGS --session-dir "$RUN_DIR/judge" --tools read,grep,find,ls @.pi/agents/memory-reviewer.md \
       "You are memory-reviewer. The dreaming branch $BRANCH is checked out. Its diff is above; you can't run commands, so judge from the diff and by reading files. Reply in the exact SCORE format from your instructions." \
       > "$review_file" || true
 

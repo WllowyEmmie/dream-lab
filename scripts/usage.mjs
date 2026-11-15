@@ -40,7 +40,19 @@ const opt = (name, def) => {
 const kind = opt("--kind", "task");
 const out = opt("--out", ".dream-state/usage.csv");
 const date = opt("--date", new Date().toISOString().slice(0, 10));
-const files = args;
+const jsonIdx = args.indexOf("--json");      // print totals as JSON, not text
+const asJson = jsonIdx !== -1;
+if (asJson) args.splice(jsonIdx, 1);
+// Arguments are session files, or folders searched for *.jsonl (subagent
+// sessions live in subfolders).
+const walk = (p) => {
+  let st;
+  try { st = fs.statSync(p); } catch { return []; }
+  if (!st.isDirectory()) return [p];
+  return fs.readdirSync(p).flatMap((n) => walk(path.join(p, n))).filter((f) => f.endsWith(".jsonl"));
+};
+const files = args.flatMap(walk);
+const sum = { sessions: 0, turns: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, tokens: 0, cost: 0 };
 
 const header = "date,kind,session,model,turns,input,output,cache_read,cache_write,total_tokens,cost_usd,cost_source\n";
 const csv = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
@@ -79,14 +91,17 @@ for (const file of files) {
   }
   allTokens += t.total;
   allCost += t.cost;
+  sum.sessions++; sum.turns += t.turns; sum.input += t.input; sum.output += t.output;
+  sum.cacheRead += t.cacheRead; sum.cacheWrite += t.cacheWrite; sum.tokens += t.total; sum.cost += t.cost;
   rows.push([date, kind, id, [...models].join(" "), t.turns, t.input, t.output,
              t.cacheRead, t.cacheWrite, t.total, t.cost.toFixed(6), [...sources].join(" ")].map(csv).join(","));
 }
 
-if (rows.length) {
+if (rows.length && out !== "none") {
   fs.mkdirSync(path.dirname(out), { recursive: true });
   if (!fs.existsSync(out)) fs.writeFileSync(out, header);
   fs.appendFileSync(out, rows.join("\n") + "\n");
 }
 const k = allTokens >= 1000 ? `${(allTokens / 1000).toFixed(1)}k` : `${allTokens}`;
-console.log(`${k} tokens / $${allCost.toFixed(4)}`);
+if (asJson) console.log(JSON.stringify({ ...sum, cost: Number(sum.cost.toFixed(6)) }));
+else console.log(`${k} tokens / $${allCost.toFixed(4)}`);

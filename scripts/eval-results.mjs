@@ -1,0 +1,104 @@
+#!/usr/bin/env node
+// Helper for scripts/run-evals.sh (AI-23): lists tasks, records one run per line
+// in a runs file, and builds results.json from it.
+//
+//   node scripts/eval-results.mjs tasks [group]
+//   node scripts/eval-results.mjs has <runs> <setup> <task> <repeat>
+//   node scripts/eval-results.mjs record <runs>          (fields come from RUN_* env vars)
+//   node scripts/eval-results.mjs summarize <runs> <results.json> [state dir]
+import fs from "node:fs";
+import path from "node:path";
+
+const [cmd, ...a] = process.argv.slice(2);
+const readRuns = (file) => {
+  if (!fs.existsSync(file)) return [];
+  const rows = fs.readFileSync(file, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const last = new Map();                       // a rerun replaces the earlier row
+  for (const r of rows) last.set(`${r.setup}|${r.task}|${r.repeat}`, r);
+  return [...last.values()];
+};
+const walk = (p) => {
+  let st;
+  try { st = fs.statSync(p); } catch { return []; }
+  if (!st.isDirectory()) return [p];
+  return fs.readdirSync(p).flatMap((n) => walk(path.join(p, n))).filter((f) => f.endsWith(".jsonl"));
+};
+
+if (cmd === "tasks") {
+  const { tasks } = JSON.parse(fs.readFileSync("tasks/tasks.json", "utf8"));
+  for (const t of tasks) if (!a[0] || a[0] === "all" || t.group === a[0]) console.log(`${t.id} ${t.group}`);
+
+} else if (cmd === "has") {
+  const [file, setup, task, repeat] = a;
+  const hit = readRuns(file).some((r) => r.setup === setup && r.task === task && String(r.repeat) === repeat);
+  process.exit(hit ? 0 : 1);
+
+} else if (cmd === "record") {
+  const e = process.env;
+  // Which memory files did the agent open? Looks at tool calls in the session
+  // files; an append (">> memory/inbox.md") doesn't count as reading. Approximate.
+  const memory = new Set();
+  for (const f of walk(e.RUN_SESSIONS || "")) {
+    for (const line of fs.readFileSync(f, "utf8").split("\n")) {
+      if (!line.includes("toolCall")) continue;
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      for (const b of entry.message?.content ?? []) {
+        if (b?.type !== "toolCall") continue;
+        const text = JSON.stringify(b.arguments ?? {});
+        for (const m of text.matchAll(/(>>\s*)?memory[\\/]+([\w-]+\.md)/g)) if (!m[1]) memory.add(m[2]);
+      }
+    }
+  }
+  const usage = JSON.parse(e.RUN_USAGE || "{}");
+  const row = {
+    date: new Date().toISOString(), setup: e.RUN_SETUP, group: e.RUN_GROUP, task: e.RUN_TASK,
+    repeat: Number(e.RUN_REPEAT), passed: e.RUN_PASSED === "yes", test_edited: e.RUN_TEST_EDITED === "yes",
+    timed_out: e.RUN_TIMED_OUT === "yes", seconds: Number(e.RUN_SECONDS || 0),
+    turns: usage.turns ?? 0, tokens: usage.tokens ?? 0, cost_usd: usage.cost ?? 0,
+    memory_files_read: [...memory].sort(),
+  };
+  fs.mkdirSync(path.dirname(a[0]), { recursive: true });
+  fs.appendFileSync(a[0], JSON.stringify(row) + "\n");
+  console.log(`${row.passed ? "PASS" : "FAIL"}  ${row.turns} turns, ${(row.tokens / 1000).toFixed(1)}k tokens, $${row.cost_usd.toFixed(4)}`);
+
+} else if (cmd === "summarize") {
+  const [file, out, state] = a;
+  const runs = readRuns(file);
+  const avg = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
+  const stats = (rs) => ({
+    runs: rs.length, passed: rs.filter((r) => r.passed).length,
+    pass_rate: rs.length ? Number((rs.filter((r) => r.passed).length / rs.length).toFixed(3)) : null,
+    avg_turns: Number(avg(rs.map((r) => r.turns)).toFixed(1)),
+    avg_tokens: Math.round(avg(rs.map((r) => r.tokens))),
+    avg_cost_usd: Number(avg(rs.map((r) => r.cost_usd)).toFixed(4)),
+    avg_memory_files_read: Number(avg(rs.map((r) => r.memory_files_read.length)).toFixed(2)),
+  });
+  const setups = {};
+  for (const setup of ["none", "memory", "dreaming"]) {
+    const rs = runs.filter((r) => r.setup === setup);
+    if (!rs.length) continue;
+    setups[setup] = { all: stats(rs) };
+    for (const g of ["similar", "new", "different"]) setups[setup][g] = stats(rs.filter((r) => r.group === g));
+  }
+  const tasks = {};
+  for (const r of runs.filter((r) => r.setup !== "learning")) {
+    tasks[r.task] ??= { group: r.group };
+    const t = (tasks[r.task][r.setup] ??= { runs: 0, passed: 0 });
+    t.runs++; if (r.passed) t.passed++;
+  }
+  const result = { generated: new Date().toISOString(), setups, tasks };
+  const learning = runs.filter((r) => r.setup === "learning");
+  if (learning.length) result.learning = stats(learning);
+  // What the dreaming pass did, if run-evals.sh saved it.
+  try { result.dreaming_pass = JSON.parse(fs.readFileSync(path.join(state, "dream.json"), "utf8")); } catch {}
+  fs.writeFileSync(out, JSON.stringify(result, null, 2) + "\n");
+  for (const [name, s] of Object.entries(setups)) {
+    const cell = (g) => (s[g].runs ? `${s[g].passed}/${s[g].runs}` : "-");
+    console.log(`${name.padEnd(9)} similar ${cell("similar").padEnd(6)} new ${cell("new").padEnd(6)} different ${cell("different").padEnd(6)} all ${cell("all")}`);
+  }
+
+} else {
+  console.error("usage: eval-results.mjs tasks|has|record|summarize ...");
+  process.exit(2);
+}
