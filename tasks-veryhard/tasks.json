@@ -1,0 +1,109 @@
+{
+  "groups": {
+    "learn": "Run first. 01 gives the pricing rules only as tests; 02 and 03 explain a rule; 04 changes the rule from 03.",
+    "similar": "Needs several rules at once (see needs), including the changed one. The hidden test checks them.",
+    "new": "Larger features in the same store that need no earlier rule. Everything needed is in TASK.md.",
+    "different": "Larger standalone problems. Everything needed is in TASK.md."
+  },
+  "tasks": [
+    {
+      "id": "01-pricing-from-tests",
+      "group": "learn",
+      "title": "The pricing tests fail",
+      "path": "tasks-veryhard/01-pricing-from-tests",
+      "teaches": "pricing",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "02-reference-numbers",
+      "group": "learn",
+      "title": "References typed by people aren't recognised",
+      "path": "tasks-veryhard/02-reference-numbers",
+      "teaches": "references",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "03-dispatch-cutoff",
+      "group": "learn",
+      "title": "Dispatch dates are wrong",
+      "path": "tasks-veryhard/03-dispatch-cutoff",
+      "teaches": "dispatch",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "04-earlier-cutoff",
+      "group": "learn",
+      "title": "The warehouse cut-off has moved",
+      "path": "tasks-veryhard/04-earlier-cutoff",
+      "teaches": "dispatch-change",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "05-invoice",
+      "group": "similar",
+      "title": "Build invoices for orders",
+      "path": "tasks-veryhard/05-invoice",
+      "teaches": null,
+      "needs": "references, pricing",
+      "hidden_test": true
+    },
+    {
+      "id": "06-order-eta",
+      "group": "similar",
+      "title": "Show when an order will arrive",
+      "path": "tasks-veryhard/06-order-eta",
+      "teaches": null,
+      "needs": "dispatch, dispatch-change",
+      "hidden_test": true
+    },
+    {
+      "id": "07-dispatch-manifest",
+      "group": "similar",
+      "title": "List which orders leave on which day",
+      "path": "tasks-veryhard/07-dispatch-manifest",
+      "teaches": null,
+      "needs": "references, dispatch, dispatch-change",
+      "hidden_test": true
+    },
+    {
+      "id": "08-coupon-engine",
+      "group": "new",
+      "title": "Pick the best set of coupons",
+      "path": "tasks-veryhard/08-coupon-engine",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "09-bank-reconcile",
+      "group": "new",
+      "title": "Match bank lines to ledger entries",
+      "path": "tasks-veryhard/09-bank-reconcile",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "10-spreadsheet",
+      "group": "different",
+      "title": "Evaluate a small spreadsheet",
+      "path": "tasks-veryhard/10-spreadsheet",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "11-pattern-matcher",
+      "group": "different",
+      "title": "Match text against a pattern",
+      "path": "tasks-veryhard/11-pattern-matcher",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    }
+  ]
+}
