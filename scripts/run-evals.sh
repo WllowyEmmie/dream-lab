@@ -11,30 +11,27 @@
 # Every eval run then gets its own fresh workspace holding just one task.
 #
 #   scripts/run-evals.sh                         everything: 3 setups x 15 tasks x 3 repeats
+#   scripts/run-evals.sh --suite hard            the harder task set (tasks-hard/), scored with hidden tests
 #   scripts/run-evals.sh --setup none            one setup (none | memory | dreaming)
 #   scripts/run-evals.sh --group similar         one task group (similar | new | different)
 #   scripts/run-evals.sh --task 07-member-shipping-discount --repeats 1
 #
 # Safe to stop and rerun: finished runs are skipped. To start over, delete the
-# work folder (printed at the start) and .dream-state/evals/.
+# work folder (printed at the start) and the runs file in .dream-state/evals/.
 # Run from Git Bash. Commit your changes first: workspaces are built from HEAD.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO="$(pwd)"
-WORK="${EVAL_WORK:-$(dirname "$REPO")/dream-lab-evals}"   # outside the repo, so Pi can't see its AGENTS.md
-RUNS="$REPO/.dream-state/evals/runs.jsonl"
-RESULTS="$REPO/results.json"
-STATE="$WORK/state"
-LEARN="$WORK/learn"
 TIMEOUT="${EVAL_TIMEOUT:-1500}"          # seconds per Pi run
 # --approve: a new workspace isn't a trusted Pi project yet, and without trust
 # Pi skips its .pi/skills.
 PI_FLAGS="${EVAL_PI_FLAGS:---approve}"
 
-SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""
+SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"
 while [ $# -gt 0 ]; do
   case "$1" in
+    --suite)   SUITE="$2"; shift 2 ;;
     --setup)   SETUPS="$2"; shift 2 ;;
     --group)   GROUP="$2"; shift 2 ;;
     --repeats) REPEATS="$2"; shift 2 ;;
@@ -42,6 +39,22 @@ while [ $# -gt 0 ]; do
     *) sed -n '2,20p' "$0"; exit 2 ;;
   esac
 done
+
+# Each suite has its own tasks, work folder and results, so they never mix.
+WORK="${EVAL_WORK:-$(dirname "$REPO")/dream-lab-evals}"   # outside the repo, so Pi can't see its AGENTS.md
+case "$SUITE" in
+  easy) TASKS_SRC="tasks"; HIDDEN_SRC=""; ASK="Fix the bug described in"
+        RUNS="$REPO/.dream-state/evals/runs.jsonl"; RESULTS="$REPO/results.json" ;;
+  hard) TASKS_SRC="tasks-hard"; HIDDEN_SRC="evals/hidden/hard"; ASK="Do the task described in"
+        WORK="$WORK/hard"
+        RUNS="$REPO/.dream-state/evals/runs-hard.jsonl"; RESULTS="$REPO/results-hard.json" ;;
+  *) echo "Unknown suite: $SUITE (easy or hard)" >&2; exit 2 ;;
+esac
+STATE="$WORK/state"
+LEARN="$WORK/learn"
+list_tasks() { node scripts/eval-results.mjs tasks "$1" "$TASKS_SRC/tasks.json"; }
+# Put one task into a workspace as tasks/<id>, straight from the last commit.
+add_task() { mkdir -p "$2/tasks/$1" && git archive "HEAD:$TASKS_SRC/$1" | tar -x -C "$2/tasks/$1"; }
 
 PY=""
 for c in python3 python py; do
@@ -79,15 +92,25 @@ do_task() {  # <setup> <group> <task> <repeat> <folder>
   before="$(cksum < "$dir/tasks/$id/test_task.py")"
   started=$SECONDS
   run_pi "$dir" "$sess" "$WORK/sessions/$setup/$id-r$rep.txt" \
-    "Fix the bug described in tasks/$id/TASK.md. Follow AGENTS.md."
-  local passed="no" edited="no" timed="no"
+    "$ASK tasks/$id/TASK.md. Follow AGENTS.md."
+  local seconds=$((SECONDS - started)) visible="no" passed="no" edited="no" timed="no" hidden="0 0" tlimit=()
+  command -v timeout > /dev/null && tlimit=(timeout 120)     # in case the code under test never returns
   [ "$PI_STATUS" -eq 124 ] && timed="yes"
   [ "$(cksum < "$dir/tasks/$id/test_task.py")" = "$before" ] || edited="yes"
-  if [ "$edited" = "no" ] && ( cd "$dir/tasks/$id" && PYTHONDONTWRITEBYTECODE=1 "$PY" -m unittest -q ) > /dev/null 2>&1; then
-    passed="yes"
+  if ( cd "$dir/tasks/$id" && PYTHONDONTWRITEBYTECODE=1 ${tlimit[@]+"${tlimit[@]}"} "$PY" -m unittest -q test_task ) > /dev/null 2>&1; then
+    visible="yes"
   fi
-  RUN_SETUP="$setup" RUN_GROUP="$group" RUN_TASK="$id" RUN_REPEAT="$rep" RUN_PASSED="$passed" \
-    RUN_TEST_EDITED="$edited" RUN_TIMED_OUT="$timed" RUN_SECONDS="$((SECONDS - started))" RUN_SESSIONS="$sess" \
+  # The hidden test is only copied in now, after Pi has finished.
+  if [ -n "$HIDDEN_SRC" ] && git cat-file -e "HEAD:$HIDDEN_SRC/$id/test_hidden.py" 2> /dev/null; then
+    git show "HEAD:$HIDDEN_SRC/$id/test_hidden.py" > "$dir/tasks/$id/test_hidden.py"
+    hidden="$( cd "$dir/tasks/$id" && PYTHONDONTWRITEBYTECODE=1 ${tlimit[@]+"${tlimit[@]}"} "$PY" "$REPO/scripts/count-tests.py" test_hidden 2> /dev/null )" || hidden="0 1"
+    [ -n "$hidden" ] || hidden="0 1"
+  fi
+  # Passed = the visible test and every hidden test pass, and the test file is untouched.
+  if [ "$visible" = "yes" ] && [ "$edited" = "no" ] && [ "${hidden% *}" = "${hidden#* }" ]; then passed="yes"; fi
+  RUN_SETUP="$setup" RUN_GROUP="$group" RUN_TASK="$id" RUN_REPEAT="$rep" RUN_PASSED="$passed" RUN_VISIBLE="$visible" \
+    RUN_HIDDEN_PASSED="${hidden% *}" RUN_HIDDEN_TOTAL="${hidden#* }" \
+    RUN_TEST_EDITED="$edited" RUN_TIMED_OUT="$timed" RUN_SECONDS="$seconds" RUN_SESSIONS="$sess" \
     RUN_USAGE="$(node scripts/usage.mjs --json --out none "$sess")" \
     node scripts/eval-results.mjs record "$RUNS"
 }
@@ -98,20 +121,22 @@ case " $SETUPS " in *" memory "*|*" dreaming "*) needs_memory="yes" ;; esac
 # ---- Learning: Pi does tasks 01-06 in one workspace, building up memory. ----
 if [ "$needs_memory" = "yes" ] && [ ! -f "$STATE/learned" ]; then
   if [ ! -d "$LEARN/.git" ]; then
-    git clone -q "$REPO" "$LEARN"
-    ( cd "$LEARN" && git config user.name "dream-lab eval" && git config user.email "eval@dream-lab.invalid" \
-        && git rm -rq tasks && git commit -qm "Start with no tasks" )
+    # A new repo, not a clone: a clone's history would hold every task and hidden test.
+    mkdir -p "$LEARN"
+    git archive HEAD AGENTS.md .pi .gitignore memory dream.sh prompts scripts | tar -x -C "$LEARN"
+    ( cd "$LEARN" && git init -q && git config user.name "dream-lab eval" && git config user.email "eval@dream-lab.invalid" \
+        && git add -A && git commit -qm "Start with no tasks" )
   fi
   touch "$STATE/learned.txt"
   while read -r id group; do
     grep -qxF "$id" "$STATE/learned.txt" && continue
     echo "== learning: $id"
-    git archive HEAD "tasks/$id" | tar -x -C "$LEARN"
+    add_task "$id" "$LEARN"
     ( cd "$LEARN" && git add -A && gitq commit -qm "Add task $id" )
     do_task learning learn "$id" 1 "$LEARN"
     ( cd "$LEARN" && git add -A && gitq commit -qm "After task $id" --allow-empty )
     echo "$id" >> "$STATE/learned.txt"
-  done < <(node scripts/eval-results.mjs tasks learn)
+  done < <(list_tasks learn)
   mkdir -p "$STATE/memory/memory"
   cp "$LEARN"/memory/*.md "$STATE/memory/memory/"
   touch "$STATE/learned"
@@ -163,7 +188,8 @@ for setup in $SETUPS; do
       echo "== $setup / $id / run $rep"
       ws="$WORK/runs/$setup/$id-r$rep"
       rm -rf "$ws"; mkdir -p "$ws"
-      git archive HEAD AGENTS.md .pi .gitignore "tasks/$id" | tar -x -C "$ws"
+      git archive HEAD AGENTS.md .pi .gitignore | tar -x -C "$ws"
+      add_task "$id" "$ws"
       if [ "$setup" = "none" ]; then
         git archive HEAD:evals/no-memory | tar -x -C "$ws"
         rm -rf "$ws/.pi/skills/record-mistake" "$ws/.pi/agents/memory-reviewer.md"
@@ -174,9 +200,9 @@ for setup in $SETUPS; do
       ( cd "$ws" && git init -q && git add -A && gitq commit -qm "Start of run" )
       do_task "$setup" "$group" "$id" "$rep" "$ws"
     done
-  done < <(node scripts/eval-results.mjs tasks "$GROUP")
+  done < <(list_tasks "$GROUP")
 done
 
 echo
 node scripts/eval-results.mjs summarize "$RUNS" "$RESULTS" "$STATE"
-echo "Results: results.json   Every run: .dream-state/evals/runs.jsonl"
+echo "Results: ${RESULTS#$REPO/}   Every run: ${RUNS#$REPO/}"

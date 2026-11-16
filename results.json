@@ -1,0 +1,257 @@
+{
+  "generated": "2026-11-15T17:10:08.871Z",
+  "setups": {
+    "none": {
+      "all": {
+        "runs": 45,
+        "passed": 45,
+        "pass_rate": 1,
+        "avg_turns": 8.5,
+        "avg_tokens": 61821,
+        "avg_cost_usd": 0.0969,
+        "avg_memory_files_read": 0
+      },
+      "similar": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 10.3,
+        "avg_tokens": 80246,
+        "avg_cost_usd": 0.119,
+        "avg_memory_files_read": 0
+      },
+      "new": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 8.9,
+        "avg_tokens": 64449,
+        "avg_cost_usd": 0.1004,
+        "avg_memory_files_read": 0
+      },
+      "different": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 6.1,
+        "avg_tokens": 40768,
+        "avg_cost_usd": 0.0714,
+        "avg_memory_files_read": 0
+      }
+    },
+    "memory": {
+      "all": {
+        "runs": 45,
+        "passed": 45,
+        "pass_rate": 1,
+        "avg_turns": 11.1,
+        "avg_tokens": 98438,
+        "avg_cost_usd": 0.1362,
+        "avg_memory_files_read": 4
+      },
+      "similar": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 12.4,
+        "avg_tokens": 116685,
+        "avg_cost_usd": 0.159,
+        "avg_memory_files_read": 4
+      },
+      "new": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 10.9,
+        "avg_tokens": 100302,
+        "avg_cost_usd": 0.1409,
+        "avg_memory_files_read": 4
+      },
+      "different": {
+        "runs": 15,
+        "passed": 15,
+        "pass_rate": 1,
+        "avg_turns": 10.1,
+        "avg_tokens": 78326,
+        "avg_cost_usd": 0.1087,
+        "avg_memory_files_read": 4
+      }
+    }
+  },
+  "tasks": {
+    "07-member-shipping-discount": {
+      "group": "similar",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "08-partial-refund": {
+      "group": "similar",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "09-daily-sales-report": {
+      "group": "similar",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "10-order-lookup": {
+      "group": "similar",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "11-loyalty-points": {
+      "group": "similar",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "12-cart-remove-all": {
+      "group": "new",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "13-last-items-in-stock": {
+      "group": "new",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "14-price-display": {
+      "group": "new",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "15-shipping-tiers": {
+      "group": "new",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "16-top-products-ties": {
+      "group": "new",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "17-roman-numerals": {
+      "group": "different",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "18-lru-cache": {
+      "group": "different",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "19-csv-quotes": {
+      "group": "different",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "20-merge-intervals": {
+      "group": "different",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    },
+    "21-word-wrap": {
+      "group": "different",
+      "none": {
+        "runs": 3,
+        "passed": 3
+      },
+      "memory": {
+        "runs": 3,
+        "passed": 3
+      }
+    }
+  },
+  "learning": {
+    "runs": 6,
+    "passed": 6,
+    "pass_rate": 1,
+    "avg_turns": 12.8,
+    "avg_tokens": 120869,
+    "avg_cost_usd": 0.1537,
+    "avg_memory_files_read": 4
+  }
+}

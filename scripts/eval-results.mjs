@@ -2,7 +2,7 @@
 // Helper for scripts/run-evals.sh (AI-23): lists tasks, records one run per line
 // in a runs file, and builds results.json from it.
 //
-//   node scripts/eval-results.mjs tasks [group]
+//   node scripts/eval-results.mjs tasks [group] [tasks.json]
 //   node scripts/eval-results.mjs has <runs> <setup> <task> <repeat>
 //   node scripts/eval-results.mjs record <runs>          (fields come from RUN_* env vars)
 //   node scripts/eval-results.mjs summarize <runs> <results.json> [state dir]
@@ -25,7 +25,7 @@ const walk = (p) => {
 };
 
 if (cmd === "tasks") {
-  const { tasks } = JSON.parse(fs.readFileSync("tasks/tasks.json", "utf8"));
+  const { tasks } = JSON.parse(fs.readFileSync(a[1] || "tasks/tasks.json", "utf8"));
   for (const t of tasks) if (!a[0] || a[0] === "all" || t.group === a[0]) console.log(`${t.id} ${t.group}`);
 
 } else if (cmd === "has") {
@@ -53,21 +53,31 @@ if (cmd === "tasks") {
   const usage = JSON.parse(e.RUN_USAGE || "{}");
   const row = {
     date: new Date().toISOString(), setup: e.RUN_SETUP, group: e.RUN_GROUP, task: e.RUN_TASK,
-    repeat: Number(e.RUN_REPEAT), passed: e.RUN_PASSED === "yes", test_edited: e.RUN_TEST_EDITED === "yes",
+    repeat: Number(e.RUN_REPEAT), passed: e.RUN_PASSED === "yes",
+    visible_passed: e.RUN_VISIBLE ? e.RUN_VISIBLE === "yes" : e.RUN_PASSED === "yes",
+    hidden_passed: Number(e.RUN_HIDDEN_PASSED || 0), hidden_total: Number(e.RUN_HIDDEN_TOTAL || 0),
+    test_edited: e.RUN_TEST_EDITED === "yes",
     timed_out: e.RUN_TIMED_OUT === "yes", seconds: Number(e.RUN_SECONDS || 0),
     turns: usage.turns ?? 0, tokens: usage.tokens ?? 0, cost_usd: usage.cost ?? 0,
     memory_files_read: [...memory].sort(),
   };
   fs.mkdirSync(path.dirname(a[0]), { recursive: true });
   fs.appendFileSync(a[0], JSON.stringify(row) + "\n");
-  console.log(`${row.passed ? "PASS" : "FAIL"}  ${row.turns} turns, ${(row.tokens / 1000).toFixed(1)}k tokens, $${row.cost_usd.toFixed(4)}`);
+  const hidden = row.hidden_total ? `  visible ${row.visible_passed ? "ok" : "failed"}, hidden ${row.hidden_passed}/${row.hidden_total},` : "";
+  console.log(`${row.passed ? "PASS" : "FAIL"}${hidden}  ${row.turns} turns, ${(row.tokens / 1000).toFixed(1)}k tokens, $${row.cost_usd.toFixed(4)}`);
 
 } else if (cmd === "summarize") {
   const [file, out, state] = a;
   const runs = readRuns(file);
   const avg = (xs) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
+  // hidden_score: average share of hidden tests passed (partial credit), where a task has them.
+  const hiddenScore = (rs) => {
+    const h = rs.filter((r) => r.hidden_total > 0);
+    return h.length ? Number(avg(h.map((r) => r.hidden_passed / r.hidden_total)).toFixed(3)) : null;
+  };
   const stats = (rs) => ({
     runs: rs.length, passed: rs.filter((r) => r.passed).length,
+    visible_passed: rs.filter((r) => r.visible_passed ?? r.passed).length, hidden_score: hiddenScore(rs),
     pass_rate: rs.length ? Number((rs.filter((r) => r.passed).length / rs.length).toFixed(3)) : null,
     avg_turns: Number(avg(rs.map((r) => r.turns)).toFixed(1)),
     avg_tokens: Math.round(avg(rs.map((r) => r.tokens))),

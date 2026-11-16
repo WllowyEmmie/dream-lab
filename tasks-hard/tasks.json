@@ -1,0 +1,136 @@
+{
+  "groups": {
+    "learn": "Run first. Each task explains one of the store's rules and its test enforces it.",
+    "similar": "Needs a rule from a learning task (see needs). The task and its visible test don't mention the rule; the hidden test checks it.",
+    "new": "Harder work in the same store that needs no earlier rule. Everything needed is in TASK.md.",
+    "different": "Standalone problems with no store. Everything needed is in TASK.md."
+  },
+  "tasks": [
+    {
+      "id": "01-vat-rounding",
+      "group": "learn",
+      "title": "VAT and service charges round the wrong way",
+      "path": "tasks-hard/01-vat-rounding",
+      "teaches": "rounding",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "02-reference-numbers",
+      "group": "learn",
+      "title": "References typed by people aren't recognised",
+      "path": "tasks-hard/02-reference-numbers",
+      "teaches": "references",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "03-dispatch-cutoff",
+      "group": "learn",
+      "title": "Dispatch dates are wrong",
+      "path": "tasks-hard/03-dispatch-cutoff",
+      "teaches": "dispatch",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "04-order-totals",
+      "group": "learn",
+      "title": "Checkout totals are wrong",
+      "path": "tasks-hard/04-order-totals",
+      "teaches": "totals",
+      "needs": null,
+      "hidden_test": false
+    },
+    {
+      "id": "05-quote-vat",
+      "group": "similar",
+      "title": "Quotes need handling, VAT and a total",
+      "path": "tasks-hard/05-quote-vat",
+      "teaches": null,
+      "needs": "rounding",
+      "hidden_test": true
+    },
+    {
+      "id": "06-credit-notes",
+      "group": "similar",
+      "title": "Record credit notes and look them up",
+      "path": "tasks-hard/06-credit-notes",
+      "teaches": null,
+      "needs": "references",
+      "hidden_test": true
+    },
+    {
+      "id": "07-delivery-estimate",
+      "group": "similar",
+      "title": "Show an estimated delivery date",
+      "path": "tasks-hard/07-delivery-estimate",
+      "teaches": null,
+      "needs": "dispatch",
+      "hidden_test": true
+    },
+    {
+      "id": "08-checkout-summary",
+      "group": "similar",
+      "title": "Build the checkout summary",
+      "path": "tasks-hard/08-checkout-summary",
+      "teaches": null,
+      "needs": "totals",
+      "hidden_test": true
+    },
+    {
+      "id": "09-stock-reservations",
+      "group": "new",
+      "title": "Hold stock while a customer checks out",
+      "path": "tasks-hard/09-stock-reservations",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "10-refund-allocation",
+      "group": "new",
+      "title": "Refunds go back to the wrong tender",
+      "path": "tasks-hard/10-refund-allocation",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "11-fifo-inventory",
+      "group": "new",
+      "title": "Value stock first-in, first-out",
+      "path": "tasks-hard/11-fifo-inventory",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "12-expression-evaluator",
+      "group": "different",
+      "title": "Evaluate arithmetic expressions",
+      "path": "tasks-hard/12-expression-evaluator",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "13-cron-next",
+      "group": "different",
+      "title": "Find the next run of a cron schedule",
+      "path": "tasks-hard/13-cron-next",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    },
+    {
+      "id": "14-json-patch",
+      "group": "different",
+      "title": "Apply a JSON Patch",
+      "path": "tasks-hard/14-json-patch",
+      "teaches": null,
+      "needs": null,
+      "hidden_test": true
+    }
+  ]
+}
