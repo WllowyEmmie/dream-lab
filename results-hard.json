@@ -1,0 +1,81 @@
+{
+  "generated": "2026-11-16T13:59:30.381Z",
+  "setups": {
+    "none": {
+      "all": {
+        "runs": 4,
+        "passed": 0,
+        "visible_passed": 4,
+        "hidden_score": 0.433,
+        "pass_rate": 0,
+        "avg_turns": 19.8,
+        "avg_tokens": 181283,
+        "avg_cost_usd": 0.3093,
+        "avg_memory_files_read": 0
+      },
+      "similar": {
+        "runs": 4,
+        "passed": 0,
+        "visible_passed": 4,
+        "hidden_score": 0.433,
+        "pass_rate": 0,
+        "avg_turns": 19.8,
+        "avg_tokens": 181283,
+        "avg_cost_usd": 0.3093,
+        "avg_memory_files_read": 0
+      },
+      "new": {
+        "runs": 0,
+        "passed": 0,
+        "visible_passed": 0,
+        "hidden_score": null,
+        "pass_rate": null,
+        "avg_turns": 0,
+        "avg_tokens": 0,
+        "avg_cost_usd": 0,
+        "avg_memory_files_read": 0
+      },
+      "different": {
+        "runs": 0,
+        "passed": 0,
+        "visible_passed": 0,
+        "hidden_score": null,
+        "pass_rate": null,
+        "avg_turns": 0,
+        "avg_tokens": 0,
+        "avg_cost_usd": 0,
+        "avg_memory_files_read": 0
+      }
+    }
+  },
+  "tasks": {
+    "05-quote-vat": {
+      "group": "similar",
+      "none": {
+        "runs": 1,
+        "passed": 0
+      }
+    },
+    "06-credit-notes": {
+      "group": "similar",
+      "none": {
+        "runs": 1,
+        "passed": 0
+      }
+    },
+    "07-delivery-estimate": {
+      "group": "similar",
+      "none": {
+        "runs": 1,
+        "passed": 0
+      }
+    },
+    "08-checkout-summary": {
+      "group": "similar",
+      "none": {
+        "runs": 1,
+        "passed": 0
+      }
+    }
+  }
+}

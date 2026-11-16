@@ -2,3 +2,4 @@
 .dream-state/
 .env
 __pycache__/
+Claude outputs/

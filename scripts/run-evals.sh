@@ -15,6 +15,11 @@
 #   scripts/run-evals.sh --setup none            one setup (none | memory | dreaming)
 #   scripts/run-evals.sh --group similar         one task group (similar | new | different)
 #   scripts/run-evals.sh --task 07-member-shipping-discount --repeats 1
+#   scripts/run-evals.sh --suite hard --rounds 6 the rounds experiment: every setup does all the tasks, round
+#                                                after round; memory carries over, and the dreaming setup
+#                                                dreams between rounds
+#   scripts/run-evals.sh --manual ...            you run Pi yourself in T3 Code: for each run the script
+#                                                builds the folder, shows the prompt and waits for you
 #
 # Safe to stop and rerun: finished runs are skipped. To start over, delete the
 # work folder (printed at the start) and the runs file in .dream-state/evals/.
@@ -28,15 +33,17 @@ TIMEOUT="${EVAL_TIMEOUT:-1500}"          # seconds per Pi run
 # Pi skips its .pi/skills.
 PI_FLAGS="${EVAL_PI_FLAGS:---approve}"
 
-SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"
+SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"; MANUAL="no"; ROUNDS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --suite)   SUITE="$2"; shift 2 ;;
+    --manual)  MANUAL="yes"; shift ;;
+    --rounds)  ROUNDS="$2"; shift 2 ;;
     --setup)   SETUPS="$2"; shift 2 ;;
     --group)   GROUP="$2"; shift 2 ;;
     --repeats) REPEATS="$2"; shift 2 ;;
     --task)    ONLY="$2"; shift 2 ;;
-    *) sed -n '2,20p' "$0"; exit 2 ;;
+    *) sed -n '2,26p' "$0"; exit 2 ;;
   esac
 done
 
@@ -48,8 +55,15 @@ case "$SUITE" in
   hard) TASKS_SRC="tasks-hard"; HIDDEN_SRC="evals/hidden/hard"; ASK="Do the task described in"
         WORK="$WORK/hard"
         RUNS="$REPO/.dream-state/evals/runs-hard.jsonl"; RESULTS="$REPO/results-hard.json" ;;
-  *) echo "Unknown suite: $SUITE (easy or hard)" >&2; exit 2 ;;
+  veryhard) TASKS_SRC="tasks-veryhard"; HIDDEN_SRC="evals/hidden/veryhard"; ASK="Do the task described in"
+        WORK="$WORK/veryhard"
+        RUNS="$REPO/.dream-state/evals/runs-veryhard.jsonl"; RESULTS="$REPO/results-veryhard.json" ;;
+  *) echo "Unknown suite: $SUITE (easy, hard or veryhard)" >&2; exit 2 ;;
 esac
+if [ -n "$ROUNDS" ]; then      # the rounds experiment keeps its own folder and results
+  WORK="${EVAL_WORK:-$(dirname "$REPO")/dream-lab-evals}/rounds/$SUITE"
+  RUNS="$REPO/.dream-state/evals/rounds-$SUITE.jsonl"
+fi
 STATE="$WORK/state"
 LEARN="$WORK/learn"
 list_tasks() { node scripts/eval-results.mjs tasks "$1" "$TASKS_SRC/tasks.json"; }
@@ -66,6 +80,29 @@ gitq() { git -c user.name="dream-lab eval" -c user.email="eval@dream-lab.invalid
 mkdir -p "$STATE" "$(dirname "$RUNS")"
 echo "Work folder: $WORK"
 
+# --manual: you run Pi in T3 Code. Show what to open and paste, wait, then copy
+# the sessions Pi saved for that folder so turns and tokens can still be counted.
+norm() { printf '%s' "$1" | sed 's#\\\\#/#g; s#\\#/#g; s#/*$##' | tr '[:upper:]' '[:lower:]'; }
+manual_run() {  # <folder> <session dir> <prompt>
+  local dir="$1" sess="$2" prompt="$3" root="${PI_CODING_AGENT_SESSION_DIR:-$HOME/.pi/agent/sessions}" want f cwd n=0
+  touch "$sess/.start"
+  echo
+  echo "  1. In T3 Code, open this folder as a project:"
+  echo "       $(winpath "$dir")"
+  echo "  2. Start a new chat with Pi and send:"
+  echo "       $prompt"
+  echo "  3. When Pi has finished, come back here."
+  if [ -n "${EVAL_MANUAL_HOOK:-}" ]; then "$EVAL_MANUAL_HOOK" "$dir" "$prompt" < /dev/null      # used by tests
+  else read -r -p "  Press Enter when Pi has finished... " _ < /dev/tty || true; fi
+  want="$(norm "$(cd "$dir" && { pwd -W 2> /dev/null || pwd; })")"
+  while IFS= read -r -d '' f; do
+    cwd="$(head -n 1 "$f" | grep -o '"cwd":"[^"]*"' | sed 's/^"cwd":"//; s/"$//' || true)"
+    [ "$(norm "$cwd")" = "$want" ] || continue
+    cp "$f" "$sess/"; n=$((n + 1))
+  done < <(find "$root" -name '*.jsonl' -newer "$sess/.start" -print0 2> /dev/null)
+  [ "$n" -gt 0 ] || echo "  (No Pi session file found for this folder, so turns and tokens are recorded as 0. Pass or fail is still checked.)"
+}
+
 # Run Pi in a folder. Sets PI_STATUS: 0 = finished, 124 = timed out.
 # Any other failure (login expired, usage limit...) isn't a result: stop.
 run_pi() {  # <folder> <session dir> <output file> <prompt>
@@ -73,6 +110,7 @@ run_pi() {  # <folder> <session dir> <output file> <prompt>
   command -v timeout > /dev/null && limit=(timeout "$TIMEOUT")
   mkdir -p "$sess"
   PI_STATUS=0
+  if [ "$MANUAL" = "yes" ]; then manual_run "$dir" "$sess" "$prompt"; return; fi
   # < /dev/null: Pi adds anything on stdin to its prompt, and this runs inside
   # loops that read the task list from stdin.
   ( cd "$dir" && ${limit[@]+"${limit[@]}"} pi -p $PI_FLAGS --session-dir "$(winpath "$sess")" "$prompt" ) \
@@ -87,12 +125,13 @@ run_pi() {  # <folder> <session dir> <output file> <prompt>
 # Run one task with Pi in a folder that already holds it, then check and record.
 do_task() {  # <setup> <group> <task> <repeat> <folder>
   local setup="$1" group="$2" id="$3" rep="$4" dir="$5"
-  local sess="$WORK/sessions/$setup/$id-r$rep" before started
+  local sess="${SESS_BASE:-$WORK/sessions/$setup}/$id-r$rep" before started
   rm -rf "$sess"
   before="$(cksum < "$dir/tasks/$id/test_task.py")"
   started=$SECONDS
-  run_pi "$dir" "$sess" "$WORK/sessions/$setup/$id-r$rep.txt" \
+  run_pi "$dir" "$sess" "$sess.txt" \
     "$ASK tasks/$id/TASK.md. Follow AGENTS.md."
+  [ -z "${AFTER_PI:-}" ] || "$AFTER_PI" "$dir" "$id"     # before the hidden test is copied in
   local seconds=$((SECONDS - started)) visible="no" passed="no" edited="no" timed="no" hidden="0 0" tlimit=()
   command -v timeout > /dev/null && tlimit=(timeout 120)     # in case the code under test never returns
   [ "$PI_STATUS" -eq 124 ] && timed="yes"
@@ -114,6 +153,95 @@ do_task() {  # <setup> <group> <task> <repeat> <folder>
     RUN_USAGE="$(node scripts/usage.mjs --json --out none "$sess")" \
     node scripts/eval-results.mjs record "$RUNS"
 }
+
+# ---- Rounds: every setup does all the tasks, round after round. ----
+# Each task still gets a fresh workspace. In the memory setups it starts with the
+# notes every earlier task left, kept in a "home" repo per setup, together with the
+# code as Pi last left it (so dreaming has code to check notes against).
+# The dreaming setup runs one dreaming pass over a round's sessions before the next round.
+if [ -n "$ROUNDS" ]; then
+  EXTRA="${RUNS%.jsonl}-extra.jsonl"     # memory size and dreaming passes, per round
+  extra() { node -e 'require("fs").appendFileSync(process.argv[1], process.argv[2] + "\n")' "$(winpath "$EXTRA")" "$1"; }
+  mem_tokens() { cat "$1"/memory/*.md 2> /dev/null | wc -m | awk '{print int(($1 + 3) / 4)}'; }
+  keep_work() {  # <workspace> <task>: carry the notes and the task's code back to the setup's home
+    [ -n "$CUR_HOME" ] || return 0
+    [ ! -f "$1/memory/inbox.md" ] || cp "$1/memory/inbox.md" "$CUR_HOME/memory/inbox.md"
+    rm -rf "$CUR_HOME/tasks/$2"; mkdir -p "$CUR_HOME/tasks"
+    cp -r "$1/tasks/$2" "$CUR_HOME/tasks/$2"
+    find "$CUR_HOME/tasks/$2" -name __pycache__ -type d -prune -exec rm -rf {} +
+    ( cd "$CUR_HOME" && git add -A && git commit -qm "After $2" --allow-empty )
+  }
+  AFTER_PI=keep_work
+  for setup in $SETUPS; do
+    case "$setup" in none|memory|dreaming) ;; *) echo "Unknown setup: $setup" >&2; exit 2 ;; esac
+    CUR_HOME=""
+    if [ "$setup" != "none" ]; then
+      CUR_HOME="$WORK/$setup/home"
+      if [ ! -d "$CUR_HOME/.git" ]; then
+        mkdir -p "$CUR_HOME"
+        git archive HEAD AGENTS.md .pi .gitignore memory dream.sh prompts scripts | tar -x -C "$CUR_HOME"
+        ( cd "$CUR_HOME" && git init -q && git config user.name "dream-lab eval" && git config user.email "eval@dream-lab.invalid" \
+            && git add -A && git commit -qm "Start" )
+      fi
+    fi
+    for round in $(seq "$ROUNDS"); do
+      SESS_BASE="$WORK/sessions/$setup/round-$round"
+      while read -r id group; do
+        [ -z "$ONLY" ] || [ "$ONLY" = "$id" ] || continue
+        node scripts/eval-results.mjs has "$RUNS" "$setup" "$id" "$round" && continue
+        echo "== $setup / round $round / $id"
+        ws="$WORK/$setup/runs/round-$round/$id"
+        rm -rf "$ws"; mkdir -p "$ws"
+        git archive HEAD AGENTS.md .pi .gitignore | tar -x -C "$ws"
+        add_task "$id" "$ws"
+        if [ "$setup" = "none" ]; then
+          git archive HEAD:evals/no-memory | tar -x -C "$ws"
+          rm -rf "$ws/.pi/skills/record-mistake" "$ws/.pi/agents/memory-reviewer.md"
+        else
+          mkdir -p "$ws/memory"
+          cp "$CUR_HOME"/memory/*.md "$ws/memory/"
+        fi
+        ( cd "$ws" && git init -q && git add -A && gitq commit -qm "Start of run" )
+        do_task "$setup" "$group" "$id" "$round" "$ws"
+      done < <(list_tasks all)
+      # End of the round, once: note how big memory got, then dream if this setup dreams.
+      [ "$setup" != "none" ] && [ -z "$ONLY" ] && [ ! -f "$WORK/$setup/round-$round.done" ] || continue
+      extra "{\"kind\":\"memory\",\"setup\":\"$setup\",\"round\":$round,\"memory_tokens\":$(mem_tokens "$CUR_HOME")}"
+      if [ "$setup" = "dreaming" ] && [ "$round" -lt "$ROUNDS" ]; then
+        echo "== dreaming pass after round $round"
+        started=$SECONDS
+        ( cd "$CUR_HOME"
+          lines=0; [ ! -f .dream-state/usage.csv ] || lines="$(wc -l < .dream-state/usage.csv)"
+          PI_CODING_AGENT_SESSION_DIR="$SESS_BASE" DREAM_ANY_CWD=1 DREAM_BRANCH="dreaming/round-$round" \
+            DREAM_BASE="$(git branch --show-current)" DREAM_PI_FLAGS="$PI_FLAGS" ./dream.sh < /dev/null
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The dreaming pass left uncommitted changes in $CUR_HOME. Stopping." >&2; exit 1
+          fi
+          if ! git show-ref --verify --quiet "refs/heads/dreaming/round-$round"; then
+            echo "dream.sh found no sessions from round $round to dream over. Stopping." >&2; exit 1
+          fi
+          gitq merge -q --no-edit "dreaming/round-$round"      # used whatever the judge scored; the score is saved
+          node -e '
+            const fs = require("fs");
+            const last = (f) => { try { const l = fs.readFileSync(f, "utf8").trim().split("\n"); return l.length > 1 ? l.pop().split("\t") : null; } catch { return null; } };
+            const j = last(".dream-state/judge-log.tsv"), m = last(".dream-state/memory-size.tsv");
+            const [out, setup, round, seconds, skip] = process.argv.slice(1);
+            let tokens = 0, cost = 0;
+            try { for (const l of fs.readFileSync(".dream-state/usage.csv", "utf8").trim().split("\n").slice(Math.max(1, Number(skip)))) {
+              const c = l.split(","); if (c[1] === "dream" || c[1] === "judge") { tokens += Number(c[9]); cost += Number(c[10]); } } } catch {}
+            fs.appendFileSync(out, JSON.stringify({ kind: "dream", setup, round: Number(round), seconds: Number(seconds), tokens,
+              cost_usd: Number(cost.toFixed(6)), judge_score: j ? Number(j[3]) || null : null,
+              memory_before: m ? Number(m[2]) : null, memory_after: m ? Number(m[3]) : null }) + "\n");
+          ' "$(winpath "$EXTRA")" "$setup" "$round" "$((SECONDS - started))" "$lines"
+        )
+      fi
+      touch "$WORK/$setup/round-$round.done"
+    done
+  done
+  echo
+  echo "Every run: ${RUNS#$REPO/}   Build the results page: node scripts/build-report.mjs"
+  exit 0
+fi
 
 needs_memory="no"
 case " $SETUPS " in *" memory "*|*" dreaming "*) needs_memory="yes" ;; esac

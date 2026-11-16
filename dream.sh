@@ -54,7 +54,9 @@ want="$(norm "$REPO_WIN")"
 new=()
 while IFS= read -r -d '' f; do
   cwd="$(head -n 1 "$f" | grep -o '"cwd":"[^"]*"' | sed 's/^"cwd":"//; s/"$//' || true)"
-  [ "$(norm "$cwd")" = "$want" ] || continue
+  # DREAM_ANY_CWD: take every session under the sessions folder, whatever folder
+  # it ran in (the eval runner gives each task its own workspace).
+  [ -n "${DREAM_ANY_CWD:-}" ] || [ "$(norm "$cwd")" = "$want" ] || continue
   grep -qxF "$f" "$PROCESSED" && continue
   new+=("$f")
 done < <(find "$SESSIONS_ROOT" -name '*.jsonl' -print0 2>/dev/null)
