@@ -18,6 +18,7 @@
 #   scripts/run-evals.sh --suite hard --rounds 6 the rounds experiment: every setup does all the tasks, round
 #                                                after round; memory carries over, and the dreaming setup
 #                                                dreams between rounds
+#   scripts/run-evals.sh ... --max-runs 3        stop after 3 runs; run the same command again to continue
 #   scripts/run-evals.sh --manual ...            you run Pi yourself in T3 Code: for each run the script
 #                                                builds the folder, shows the prompt and waits for you
 #
@@ -33,17 +34,18 @@ TIMEOUT="${EVAL_TIMEOUT:-1500}"          # seconds per Pi run
 # Pi skips its .pi/skills.
 PI_FLAGS="${EVAL_PI_FLAGS:---approve}"
 
-SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"; MANUAL="no"; ROUNDS=""
+SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"; MANUAL="no"; ROUNDS=""; MAX_RUNS=""; RUN_COUNT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --suite)   SUITE="$2"; shift 2 ;;
     --manual)  MANUAL="yes"; shift ;;
     --rounds)  ROUNDS="$2"; shift 2 ;;
+    --max-runs) MAX_RUNS="$2"; shift 2 ;;
     --setup)   SETUPS="$2"; shift 2 ;;
     --group)   GROUP="$2"; shift 2 ;;
     --repeats) REPEATS="$2"; shift 2 ;;
     --task)    ONLY="$2"; shift 2 ;;
-    *) sed -n '2,26p' "$0"; exit 2 ;;
+    *) sed -n '2,27p' "$0"; exit 2 ;;
   esac
 done
 
@@ -66,6 +68,16 @@ if [ -n "$ROUNDS" ]; then      # the rounds experiment keeps its own folder and 
 fi
 STATE="$WORK/state"
 LEARN="$WORK/learn"
+# --max-runs: stop between runs, once this call has done that many.
+maybe_stop() {
+  RUN_COUNT=$((RUN_COUNT + 1))
+  if [ -n "$MAX_RUNS" ] && [ "$RUN_COUNT" -ge "$MAX_RUNS" ]; then
+    echo; echo "MORE: stopped after $RUN_COUNT runs. Run the same command again to continue."
+    exit 0
+  fi
+}
+# Workspaces get the repo's Pi setup, minus the skill for running these evals.
+get_harness() { git archive HEAD "$@" | tar -x -C "$DEST" && rm -rf "$DEST/.pi/skills/run-evals"; }
 list_tasks() { node scripts/eval-results.mjs tasks "$1" "$TASKS_SRC/tasks.json"; }
 # Put one task into a workspace as tasks/<id>, straight from the last commit.
 add_task() { mkdir -p "$2/tasks/$1" && git archive "HEAD:$TASKS_SRC/$1" | tar -x -C "$2/tasks/$1"; }
@@ -179,7 +191,7 @@ if [ -n "$ROUNDS" ]; then
       CUR_HOME="$WORK/$setup/home"
       if [ ! -d "$CUR_HOME/.git" ]; then
         mkdir -p "$CUR_HOME"
-        git archive HEAD AGENTS.md .pi .gitignore memory dream.sh prompts scripts | tar -x -C "$CUR_HOME"
+        DEST="$CUR_HOME" get_harness AGENTS.md .pi .gitignore memory dream.sh prompts scripts
         ( cd "$CUR_HOME" && git init -q && git config user.name "dream-lab eval" && git config user.email "eval@dream-lab.invalid" \
             && git add -A && git commit -qm "Start" )
       fi
@@ -192,7 +204,7 @@ if [ -n "$ROUNDS" ]; then
         echo "== $setup / round $round / $id"
         ws="$WORK/$setup/runs/round-$round/$id"
         rm -rf "$ws"; mkdir -p "$ws"
-        git archive HEAD AGENTS.md .pi .gitignore | tar -x -C "$ws"
+        DEST="$ws" get_harness AGENTS.md .pi .gitignore
         add_task "$id" "$ws"
         if [ "$setup" = "none" ]; then
           git archive HEAD:evals/no-memory | tar -x -C "$ws"
@@ -203,6 +215,7 @@ if [ -n "$ROUNDS" ]; then
         fi
         ( cd "$ws" && git init -q && git add -A && gitq commit -qm "Start of run" )
         do_task "$setup" "$group" "$id" "$round" "$ws"
+        maybe_stop
       done < <(list_tasks all)
       # End of the round, once: note how big memory got, then dream if this setup dreams.
       [ "$setup" != "none" ] && [ -z "$ONLY" ] && [ ! -f "$WORK/$setup/round-$round.done" ] || continue
@@ -239,6 +252,7 @@ if [ -n "$ROUNDS" ]; then
     done
   done
   echo
+  echo "DONE: all runs finished."
   echo "Every run: ${RUNS#$REPO/}   Build the results page: node scripts/build-report.mjs"
   exit 0
 fi
@@ -251,7 +265,7 @@ if [ "$needs_memory" = "yes" ] && [ ! -f "$STATE/learned" ]; then
   if [ ! -d "$LEARN/.git" ]; then
     # A new repo, not a clone: a clone's history would hold every task and hidden test.
     mkdir -p "$LEARN"
-    git archive HEAD AGENTS.md .pi .gitignore memory dream.sh prompts scripts | tar -x -C "$LEARN"
+    DEST="$LEARN" get_harness AGENTS.md .pi .gitignore memory dream.sh prompts scripts
     ( cd "$LEARN" && git init -q && git config user.name "dream-lab eval" && git config user.email "eval@dream-lab.invalid" \
         && git add -A && git commit -qm "Start with no tasks" )
   fi
@@ -264,6 +278,7 @@ if [ "$needs_memory" = "yes" ] && [ ! -f "$STATE/learned" ]; then
     do_task learning learn "$id" 1 "$LEARN"
     ( cd "$LEARN" && git add -A && gitq commit -qm "After task $id" --allow-empty )
     echo "$id" >> "$STATE/learned.txt"
+    maybe_stop
   done < <(list_tasks learn)
   mkdir -p "$STATE/memory/memory"
   cp "$LEARN"/memory/*.md "$STATE/memory/memory/"
@@ -316,7 +331,7 @@ for setup in $SETUPS; do
       echo "== $setup / $id / run $rep"
       ws="$WORK/runs/$setup/$id-r$rep"
       rm -rf "$ws"; mkdir -p "$ws"
-      git archive HEAD AGENTS.md .pi .gitignore | tar -x -C "$ws"
+      DEST="$ws" get_harness AGENTS.md .pi .gitignore
       add_task "$id" "$ws"
       if [ "$setup" = "none" ]; then
         git archive HEAD:evals/no-memory | tar -x -C "$ws"
@@ -327,10 +342,12 @@ for setup in $SETUPS; do
       fi
       ( cd "$ws" && git init -q && git add -A && gitq commit -qm "Start of run" )
       do_task "$setup" "$group" "$id" "$rep" "$ws"
+      maybe_stop
     done
   done < <(list_tasks "$GROUP")
 done
 
 echo
 node scripts/eval-results.mjs summarize "$RUNS" "$RESULTS" "$STATE"
+echo "DONE: all runs finished."
 echo "Results: ${RESULTS#$REPO/}   Every run: ${RUNS#$REPO/}"
