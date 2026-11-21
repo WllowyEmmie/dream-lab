@@ -19,6 +19,13 @@ tasks yourself.
 | rounds, round by round, "run it 6 times" | `--rounds 6` (use their number) |
 | only the similar / new / different tasks | `--group similar` (not with `--rounds`) |
 | one task | `--task <folder name>` |
+| on Haiku, the small model | `--model claude-haiku-5-5` |
+| on Sonnet | `--model claude-sonnet-5-5` |
+| another model, named | `--model <its id>` (ask if unsure which) |
+
+With `--model`, every Pi call in the run (the tasks, dreaming and the judge) uses
+that model, and its results are kept separate from the default model's. Keep
+the same `--model` on every continuation of that run.
 
 If they don't say which task set, or whether they want rounds, ask once before
 starting. Don't use `--manual`: it waits for a person.

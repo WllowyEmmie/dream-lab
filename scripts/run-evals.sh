@@ -19,6 +19,10 @@
 #                                                after round; memory carries over, and the dreaming setup
 #                                                dreams between rounds
 #   scripts/run-evals.sh ... --max-runs 3        stop after 3 runs; run the same command again to continue
+#   scripts/run-evals.sh ... --model claude-haiku-5-5
+#                                                run every Pi call (tasks, dreaming, judge) on that model;
+#                                                its work folder and results are kept apart from the default
+#                                                model's (provider claude-bridge unless --provider says)
 #   scripts/run-evals.sh --manual ...            you run Pi yourself in T3 Code: for each run the script
 #                                                builds the folder, shows the prompt and waits for you
 #
@@ -34,7 +38,7 @@ TIMEOUT="${EVAL_TIMEOUT:-1500}"          # seconds per Pi run
 # Pi skips its .pi/skills.
 PI_FLAGS="${EVAL_PI_FLAGS:---approve}"
 
-SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"; MANUAL="no"; ROUNDS=""; MAX_RUNS=""; RUN_COUNT=0
+SETUPS="none memory dreaming"; GROUP="all"; REPEATS=3; ONLY=""; SUITE="easy"; MANUAL="no"; ROUNDS=""; MAX_RUNS=""; RUN_COUNT=0; MODEL=""; PROVIDER=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --suite)   SUITE="$2"; shift 2 ;;
@@ -45,7 +49,9 @@ while [ $# -gt 0 ]; do
     --group)   GROUP="$2"; shift 2 ;;
     --repeats) REPEATS="$2"; shift 2 ;;
     --task)    ONLY="$2"; shift 2 ;;
-    *) sed -n '2,27p' "$0"; exit 2 ;;
+    --model)    MODEL="$2"; shift 2 ;;
+    --provider) PROVIDER="$2"; shift 2 ;;
+    *) sed -n '2,31p' "$0"; exit 2 ;;
   esac
 done
 
@@ -65,6 +71,17 @@ esac
 if [ -n "$ROUNDS" ]; then      # the rounds experiment keeps its own folder and results
   WORK="${EVAL_WORK:-$(dirname "$REPO")/dream-lab-evals}/rounds/$SUITE"
   RUNS="$REPO/.dream-state/evals/rounds-$SUITE.jsonl"
+fi
+# --model: another model gets its own work folder (so its own memory) and results.
+if [ -n "$MODEL" ]; then
+  case "$MODEL" in *[!A-Za-z0-9._-]*) echo "Bad model name: $MODEL" >&2; exit 2 ;; esac
+  PROVIDER="${PROVIDER:-claude-bridge}"
+  PI_FLAGS="$PI_FLAGS --provider $PROVIDER --model $MODEL"
+  base="${EVAL_WORK:-$(dirname "$REPO")/dream-lab-evals}"
+  WORK="$base/models/$MODEL${WORK#$base}"
+  RUNS="$(dirname "$RUNS")/models/$MODEL/$(basename "$RUNS")"
+  RESULTS="${RESULTS%.json}-$MODEL.json"
+  echo "Model: $MODEL (provider $PROVIDER)"
 fi
 STATE="$WORK/state"
 LEARN="$WORK/learn"
@@ -107,6 +124,7 @@ slack() {
     || echo "(Slack post failed; the eval carries on.)" >&2
 }
 SUITE_NAME="$SUITE"; [ "$SUITE" = "veryhard" ] && SUITE_NAME="very hard"
+[ -z "$MODEL" ] || SUITE_NAME="$SUITE_NAME, $MODEL"
 
 # --manual: you run Pi in T3 Code. Show what to open and paste, wait, then copy
 # the sessions Pi saved for that folder so turns and tokens can still be counted.
@@ -179,7 +197,7 @@ do_task() {  # <setup> <group> <task> <repeat> <folder>
   fi
   # Passed = the visible test and every hidden test pass, and the test file is untouched.
   if [ "$visible" = "yes" ] && [ "$edited" = "no" ] && [ "${hidden% *}" = "${hidden#* }" ]; then passed="yes"; fi
-  RUN_SETUP="$setup" RUN_GROUP="$group" RUN_TASK="$id" RUN_REPEAT="$rep" RUN_PASSED="$passed" RUN_VISIBLE="$visible" \
+  RUN_MODEL="${MODEL:-default}" RUN_SETUP="$setup" RUN_GROUP="$group" RUN_TASK="$id" RUN_REPEAT="$rep" RUN_PASSED="$passed" RUN_VISIBLE="$visible" \
     RUN_HIDDEN_PASSED="${hidden% *}" RUN_HIDDEN_TOTAL="${hidden#* }" \
     RUN_TEST_EDITED="$edited" RUN_TIMED_OUT="$timed" RUN_SECONDS="$seconds" RUN_SESSIONS="$sess" \
     RUN_USAGE="$(node scripts/usage.mjs --json --out none "$sess")" \

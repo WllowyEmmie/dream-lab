@@ -72,7 +72,7 @@ function chart(title, sub, rows, max) {
   return `<figure class="chart"><figcaption><strong>${esc(title)}</strong><span>${esc(sub)}</span></figcaption>${bars}</figure>`;
 }
 
-function suiteSection(key, runs) {
+function suiteSection(key, runs, label) {
   const meta = SUITES[key] || { title: `${key} tasks`, tasks: null, work: path.join(WORK, key), about: "" };
   const taskList = meta.tasks ? readJson(meta.tasks)?.tasks ?? [] : [];
   const evalTasks = taskList.filter((t) => t.group !== "learn").length;
@@ -127,13 +127,14 @@ function suiteSection(key, runs) {
 
   // One-off costs that the memory setups pay before any eval task.
   const learning = stats(runs.filter((r) => r.setup === "learning"));
-  const dream = readJson(path.join(meta.work, "state", "dream.json"));
+  const work = label ? path.join(WORK, "models", label, path.relative(WORK, meta.work)) : meta.work;
+  const dream = readJson(path.join(work, "state", "dream.json"));
   const extras = [];
   if (learning.runs) extras.push(`<li><strong>Learning tasks</strong> (both memory setups): ${learning.passed}/${learning.runs} passed, ${fmtTime(learning.totalSeconds)}, ${fmtTokens(learning.totalTokens)} tokens, ${fmtCost(learning.totalCost)}.</li>`);
   if (dream) extras.push(`<li><strong>Dreaming pass</strong> (memory + dreaming only): ${fmtTokens(dream.tokens)} tokens, ${fmtCost(dream.cost_usd)}. Memory went from ${dream.memory_tokens_before} to ${dream.memory_tokens_after} tokens, and the judge scored it ${dream.judge_score ?? "–"}/5.</li>`);
 
   return `<section>
-  <h2>${esc(meta.title)}</h2>
+  <h2>${esc(meta.title)}${label ? ` · ${esc(label)}` : ""}</h2>
   <p class="about">${esc(meta.about)} ${evalTasks ? `${evalTasks} tasks, ${repeats} run${repeats === 1 ? "" : "s"} each per setup.` : ""}</p>
   <ul class="legend">${progress}</ul>
   <div class="charts">${charts.join("")}</div>
@@ -175,7 +176,7 @@ function lineChart(title, sub, series, rounds, fmt, fixedMax) {
     `<text class="tick" x="${(L + W - R) / 2}" y="${H - 2}" text-anchor="middle">Round</text>${lines}</svg></figure>`;
 }
 
-function roundsSection(key, runs, extra) {
+function roundsSection(key, runs, extra, label) {
   const meta = SUITES[key] || { title: `${key} tasks`, tasks: null, about: "" };
   const taskCount = meta.tasks ? (readJson(meta.tasks)?.tasks ?? []).length : new Set(runs.map((r) => r.task)).size;
   const rounds = Math.max(1, ...runs.map((r) => r.repeat));
@@ -222,7 +223,7 @@ function roundsSection(key, runs, extra) {
     return ds.length ? `<td>${fmtTokens(sum(ds.map((d) => d.tokens)))} · ${fmtCost(sum(ds.map((d) => d.cost_usd)))}<small>${ds.length} dreaming pass${ds.length === 1 ? "" : "es"}</small></td>` : "<td>–</td>"; })()}</tr>`;
 
   return `<section>
-  <h2>${esc(meta.title)}, round by round</h2>
+  <h2>${esc(meta.title)}, round by round${label ? ` · ${esc(label)}` : ""}</h2>
   <p class="about">Every setup does all ${taskCount} tasks, then does them again. Memory carries over from task to task and round to round; without memory every round starts from nothing. ${esc(meta.about)}</p>
   <ul class="legend">${progress}</ul>
   <div class="charts">${charts.join("")}</div>
@@ -234,15 +235,25 @@ function roundsSection(key, runs, extra) {
 </section>`;
 }
 
-const files = fs.existsSync(RUNS_DIR) ? fs.readdirSync(RUNS_DIR).filter((f) => /^runs(-[\w-]+)?\.jsonl$/.test(f)) : [];
-const suites = files.map((f) => ({ key: f === "runs.jsonl" ? "easy" : f.slice(5, -6), runs: readRuns(path.join(RUNS_DIR, f)) }))
-  .sort((a, b) => Object.keys(SUITES).indexOf(a.key) - Object.keys(SUITES).indexOf(b.key));
+// Runs on the default model are in RUNS_DIR; runs on another model (run-evals.sh
+// --model) are in RUNS_DIR/models/<model>/ and get their own sections.
 const order = Object.keys(SUITES);
-const roundSuites = (fs.existsSync(RUNS_DIR) ? fs.readdirSync(RUNS_DIR) : []).filter((f) => /^rounds-[\w]+\.jsonl$/.test(f))
-  .map((f) => { const key = f.slice(7, -6); const extraFile = path.join(RUNS_DIR, `rounds-${key}-extra.jsonl`);
-    return { key, runs: readRuns(path.join(RUNS_DIR, f)),
-             extra: fs.existsSync(extraFile) ? fs.readFileSync(extraFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [] }; })
-  .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+const readExtra = (f) => (fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
+function load(dir, label) {
+  const names = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
+  const suites = names.filter((f) => /^runs(-[\w-]+)?\.jsonl$/.test(f))
+    .map((f) => ({ key: f === "runs.jsonl" ? "easy" : f.slice(5, -6), label, runs: readRuns(path.join(dir, f)) }));
+  const rounds = names.filter((f) => /^rounds-[\w]+\.jsonl$/.test(f))
+    .map((f) => { const key = f.slice(7, -6);
+      return { key, label, runs: readRuns(path.join(dir, f)), extra: readExtra(path.join(dir, `rounds-${key}-extra.jsonl`)) }; });
+  return { suites, rounds };
+}
+const modelDirs = fs.existsSync(path.join(RUNS_DIR, "models")) ? fs.readdirSync(path.join(RUNS_DIR, "models")).filter((m) => /^[\w.-]+$/.test(m)).sort() : [];
+const loaded = [load(RUNS_DIR, null), ...modelDirs.map((m) => load(path.join(RUNS_DIR, "models", m), m))];
+const bySuite = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
+// Same task set together, default model first, then the others.
+const suites = loaded.flatMap((l) => l.suites).sort(bySuite);
+const roundSuites = loaded.flatMap((l) => l.rounds).sort(bySuite);
 if (!suites.length && !roundSuites.length) { console.error(`No runs found in ${RUNS_DIR}. Run scripts/run-evals.sh first.`); process.exit(1); }
 const model = readJson(path.join(process.env.PI_CODING_AGENT_DIR || path.join(process.env.HOME || process.env.USERPROFILE || "", ".pi", "agent"), "settings.json"))?.defaultModel;
 const today = new Date().toISOString().slice(0, 10);
@@ -327,9 +338,9 @@ table.rounds thead th:first-child { width: 17%; }
   <h1>dream-lab results</h1>
   <p class="lede">The same coding tasks, done by Pi under three memory setups. For each setup: how often it got the task right, how long it took and how much credit it used.</p>
 </header>
-${roundSuites.map((s) => roundsSection(s.key, s.runs, s.extra)).join("\n")}
+${roundSuites.map((s) => roundsSection(s.key, s.runs, s.extra, s.label ?? (modelDirs.length ? model : null))).join("\n")}
 ${roundSuites.length && suites.length ? `<header class="part2"><h2 class="divider">First experiment: memory learned once, then fixed</h2><p class="lede">Here memory came only from the learning tasks and didn't change during the eval tasks. Each task was run several times from that same memory.</p></header>` : ""}
-${suites.map((s) => suiteSection(s.key, s.runs)).join("\n")}
+${suites.map((s) => suiteSection(s.key, s.runs, s.label)).join("\n")}
 <footer>
   Built ${today} from .dream-state/evals${model ? `, model ${esc(model)}` : ""}. Cost is tokens at API list prices, an estimate: on a Claude login the runs come out of usage limits, not a bill. Time is how long Pi took on each task.
 </footer>
@@ -352,4 +363,5 @@ for (const row of document.querySelectorAll("[data-tip]")) {
 </html>
 `;
 fs.writeFileSync(OUT, html);
-console.log(`Wrote ${OUT} (${[...roundSuites.map((s) => `${s.key} rounds: ${s.runs.length} runs`), ...suites.map((s) => `${s.key}: ${s.runs.length} runs`)].join(", ")})`);
+const tag = (s) => (s.label ? ` (${s.label})` : "");
+console.log(`Wrote ${OUT} (${[...roundSuites.map((s) => `${s.key} rounds${tag(s)}: ${s.runs.length} runs`), ...suites.map((s) => `${s.key}${tag(s)}: ${s.runs.length} runs`)].join(", ")})`);

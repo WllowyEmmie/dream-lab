@@ -52,7 +52,7 @@ if (cmd === "tasks") {
   }
   const usage = JSON.parse(e.RUN_USAGE || "{}");
   const row = {
-    date: new Date().toISOString(), setup: e.RUN_SETUP, group: e.RUN_GROUP, task: e.RUN_TASK,
+    date: new Date().toISOString(), model: e.RUN_MODEL || "default", setup: e.RUN_SETUP, group: e.RUN_GROUP, task: e.RUN_TASK,
     repeat: Number(e.RUN_REPEAT), passed: e.RUN_PASSED === "yes",
     visible_passed: e.RUN_VISIBLE ? e.RUN_VISIBLE === "yes" : e.RUN_PASSED === "yes",
     hidden_passed: Number(e.RUN_HIDDEN_PASSED || 0), hidden_total: Number(e.RUN_HIDDEN_TOTAL || 0),
