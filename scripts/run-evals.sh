@@ -92,6 +92,22 @@ gitq() { git -c user.name="dream-lab eval" -c user.email="eval@dream-lab.invalid
 mkdir -p "$STATE" "$(dirname "$RUNS")"
 echo "Work folder: $WORK"
 
+# ---- Slack: posts after each round, when a run stops early, and when all is done ----
+# Uses SLACK_WEBHOOK_URL from the repo's .env, like dream.sh. Without it, nothing is
+# posted. EVAL_SLACK=0 turns it off for one run. A failed post never stops the eval.
+if [ -z "${SLACK_WEBHOOK_URL:-}" ] && [ -f "$REPO/.env" ]; then
+  SLACK_WEBHOOK_URL="$(tr -d '\r' < "$REPO/.env" | sed -n 's/^SLACK_WEBHOOK_URL=//p' | tail -n 1)"
+fi
+[ "${EVAL_SLACK:-1}" = "0" ] && SLACK_WEBHOOK_URL=""
+slack() {
+  [ -n "${SLACK_WEBHOOK_URL:-}" ] || return 0
+  local payload
+  payload="$(node -e 'process.stdout.write(JSON.stringify({text: process.argv[1]}))' "$1")" || return 0
+  curl -fsS -m 20 -X POST -H 'Content-Type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL" > /dev/null 2>&1 \
+    || echo "(Slack post failed; the eval carries on.)" >&2
+}
+SUITE_NAME="$SUITE"; [ "$SUITE" = "veryhard" ] && SUITE_NAME="very hard"
+
 # --manual: you run Pi in T3 Code. Show what to open and paste, wait, then copy
 # the sessions Pi saved for that folder so turns and tokens can still be counted.
 norm() { printf '%s' "$1" | sed 's#\\\\#/#g; s#\\#/#g; s#/*$##' | tr '[:upper:]' '[:lower:]'; }
@@ -130,6 +146,10 @@ run_pi() {  # <folder> <session dir> <output file> <prompt>
   if [ "$PI_STATUS" -ne 0 ] && [ "$PI_STATUS" -ne 124 ]; then
     echo "Pi failed to run, so the eval stopped. Fix it and rerun; finished runs are kept." >&2
     cat "$out.err" >&2
+    local why
+    why="$( { tail -n 3 "$out.err"; tail -n 3 "$out"; } 2> /dev/null | grep -v '^[[:space:]]*$' | tail -n 3 )"
+    slack ":octagonal_sign: dream-lab eval ($SUITE_NAME tasks) stopped: Pi couldn't run. Finished runs are kept; run the same command again to continue.
+\`\`\`${why:-no error text}\`\`\`"
     exit 1
   fi
 }
@@ -218,14 +238,16 @@ if [ -n "$ROUNDS" ]; then
         maybe_stop
       done < <(list_tasks all)
       # End of the round, once: note how big memory got, then dream if this setup dreams.
-      [ "$setup" != "none" ] && [ -z "$ONLY" ] && [ ! -f "$WORK/$setup/round-$round.done" ] || continue
-      extra "{\"kind\":\"memory\",\"setup\":\"$setup\",\"round\":$round,\"memory_tokens\":$(mem_tokens "$CUR_HOME")}"
+      [ -z "$ONLY" ] && [ ! -f "$WORK/$setup/round-$round.done" ] || continue
+      mkdir -p "$WORK/$setup"
+      [ "$setup" = "none" ] || extra "{\"kind\":\"memory\",\"setup\":\"$setup\",\"round\":$round,\"memory_tokens\":$(mem_tokens "$CUR_HOME")}"
       if [ "$setup" = "dreaming" ] && [ "$round" -lt "$ROUNDS" ]; then
         echo "== dreaming pass after round $round"
         started=$SECONDS
         ( cd "$CUR_HOME"
           lines=0; [ ! -f .dream-state/usage.csv ] || lines="$(wc -l < .dream-state/usage.csv)"
-          PI_CODING_AGENT_SESSION_DIR="$SESS_BASE" DREAM_ANY_CWD=1 DREAM_BRANCH="dreaming/round-$round" \
+          # SLACK_WEBHOOK_URL="": the round's own Slack message reports this pass.
+          SLACK_WEBHOOK_URL="" PI_CODING_AGENT_SESSION_DIR="$SESS_BASE" DREAM_ANY_CWD=1 DREAM_BRANCH="dreaming/round-$round" \
             DREAM_BASE="$(git branch --show-current)" DREAM_PI_FLAGS="$PI_FLAGS" ./dream.sh < /dev/null
           if [ -n "$(git status --porcelain)" ]; then
             echo "The dreaming pass left uncommitted changes in $CUR_HOME. Stopping." >&2; exit 1
@@ -249,10 +271,19 @@ if [ -n "$ROUNDS" ]; then
         )
       fi
       touch "$WORK/$setup/round-$round.done"
+      slack "$(node scripts/eval-results.mjs line "$(winpath "$RUNS")" "$setup" "$round" "$(winpath "$EXTRA")" "$SUITE_NAME" "$ROUNDS")"
     done
   done
   echo
   echo "DONE: all runs finished."
+  if [ -z "$ONLY" ] && [ ! -f "$WORK/summary-posted" ]; then
+    complete="yes"
+    for setup in none memory dreaming; do [ -f "$WORK/$setup/round-$ROUNDS.done" ] || complete="no"; done
+    if [ "$complete" = "yes" ]; then
+      slack "$(node scripts/eval-results.mjs line "$(winpath "$RUNS")" all 0 "$(winpath "$EXTRA")" "$SUITE_NAME" "$ROUNDS")"
+      touch "$WORK/summary-posted"
+    fi
+  fi
   echo "Every run: ${RUNS#$REPO/}   Build the results page: node scripts/build-report.mjs"
   exit 0
 fi
@@ -348,6 +379,15 @@ for setup in $SETUPS; do
 done
 
 echo
-node scripts/eval-results.mjs summarize "$RUNS" "$RESULTS" "$STATE"
+summary="$(node scripts/eval-results.mjs summarize "$RUNS" "$RESULTS" "$STATE")"
+echo "$summary"
 echo "DONE: all runs finished."
+if [ -z "$ONLY" ] && [ "$GROUP" = "all" ]; then
+  key="$(printf '%s' "$SETUPS $REPEATS" | tr ' ' '_')"
+  if [ ! -f "$STATE/posted-$key" ]; then
+    slack ":white_check_mark: dream-lab eval finished: $SUITE_NAME tasks, setups $SETUPS, $REPEATS run(s) each.
+\`\`\`$summary\`\`\`"
+    touch "$STATE/posted-$key"
+  fi
+fi
 echo "Results: ${RESULTS#$REPO/}   Every run: ${RUNS#$REPO/}"

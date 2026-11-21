@@ -66,6 +66,39 @@ if (cmd === "tasks") {
   const hidden = row.hidden_total ? `  visible ${row.visible_passed ? "ok" : "failed"}, hidden ${row.hidden_passed}/${row.hidden_total},` : "";
   console.log(`${row.passed ? "PASS" : "FAIL"}${hidden}  ${row.turns} turns, ${(row.tokens / 1000).toFixed(1)}k tokens, $${row.cost_usd.toFixed(4)}`);
 
+} else if (cmd === "line") {
+  // One Slack message: a round of one setup, or (setup "all") the whole rounds run.
+  const [file, setup, round, extraFile, suite, rounds] = a;
+  const runs = readRuns(file);
+  const extra = (() => { try { return fs.readFileSync(extraFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch { return []; } })();
+  const name = { none: "No memory", memory: "Memory", dreaming: "Memory + dreaming" };
+  const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(2)}M` : `${(n / 1000).toFixed(1)}k`);
+  const time = (s) => (s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m` : `${Math.round(s / 60)}m`);
+  const sumUp = (rs) => ({ n: rs.length, ok: rs.filter((r) => r.passed).length, s: rs.reduce((x, r) => x + r.seconds, 0),
+    t: rs.reduce((x, r) => x + r.tokens, 0), c: rs.reduce((x, r) => x + r.cost_usd, 0) });
+  const similar = (rs) => { const s = rs.filter((r) => r.group === "similar"); return s.length ? `, similar ${s.filter((r) => r.passed).length}/${s.length}` : ""; };
+  if (setup !== "all") {
+    const rs = runs.filter((r) => r.setup === setup && String(r.repeat) === round);
+    const s = sumUp(rs);
+    const mem = extra.find((e) => e.kind === "memory" && e.setup === setup && String(e.round) === round);
+    const dream = extra.find((e) => e.kind === "dream" && e.setup === setup && String(e.round) === round);
+    const lines = [`:bar_chart: dream-lab eval, ${suite} tasks: *${name[setup] ?? setup}*, round ${round} of ${rounds} done`,
+      `Passed ${s.ok}/${s.n}${similar(rs)} · ${time(s.s)} · ${tok(s.t)} tokens · $${s.c.toFixed(2)}`];
+    if (mem) lines.push(`Memory: ${mem.memory_tokens} tokens`);
+    if (dream) lines.push(`Dreaming pass after it: ${tok(dream.tokens)} tokens, $${dream.cost_usd.toFixed(2)}, judge ${dream.judge_score ?? "–"}/5, memory ${dream.memory_before} to ${dream.memory_after} tokens`);
+    console.log(lines.join("\n"));
+  } else {
+    const lines = [`:white_check_mark: dream-lab eval finished: ${suite} tasks, ${rounds} rounds`];
+    for (const id of ["none", "memory", "dreaming"]) {
+      const rs = runs.filter((r) => r.setup === id);
+      if (!rs.length) continue;
+      const s = sumUp(rs);
+      lines.push(`*${name[id]}*: passed ${s.ok}/${s.n}${similar(rs)} · ${time(s.s)} · ${tok(s.t)} tokens · $${s.c.toFixed(2)}`);
+    }
+    lines.push("Build the results page: node scripts/build-report.mjs");
+    console.log(lines.join("\n"));
+  }
+
 } else if (cmd === "summarize") {
   const [file, out, state] = a;
   const runs = readRuns(file);
