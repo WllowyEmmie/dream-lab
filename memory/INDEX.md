@@ -1,7 +1,8 @@
 # Memory index
 
-Read this first. Open only the files relevant to the current task.
+Read all three files before every task. Rules in them apply to the whole repo.
 
-- conventions.md: rules for this repo (code style, commands, how tests run)
+- conventions.md: rules for this repo, sorted by the dreaming pass
 - past-mistakes.md: errors agents made before and how they were fixed
-- inbox.md: raw notes from recent sessions, not yet sorted by dreaming
+- inbox.md: rules and notes from recent sessions that dreaming hasn't sorted yet;
+  they count just as much as conventions.md

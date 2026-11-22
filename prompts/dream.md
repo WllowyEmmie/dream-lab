@@ -37,6 +37,8 @@ For every line in `inbox.md` and every existing note in `conventions.md` and
 ### 2. Organize
 
 Move each verified inbox line to the file it belongs in:
+- `RULE: ...` -> `conventions.md`, as a general rule (drop the "learned in" part
+  once it's verified)
 - `MISTAKE: ... | FIX: ... | FILE: ...` -> `past-mistakes.md`
 - `CONTRADICTION: ...` -> fix or remove the note it contradicts, then add the
   corrected rule to `conventions.md` if it's a rule

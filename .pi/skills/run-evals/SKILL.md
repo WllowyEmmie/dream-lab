@@ -22,6 +22,7 @@ tasks yourself.
 | on Haiku, the small model | `--model claude-haiku-5-5` |
 | on Sonnet | `--model claude-sonnet-5-5` |
 | another model, named | `--model <its id>` (ask if unsure which) |
+| with harness v2, a named version | `--label harness-v2` (their name, letters, digits, `-`) |
 
 With `--model`, every Pi call in the run (the tasks, dreaming and the judge) uses
 that model, and its results are kept separate from the default model's. Keep

@@ -5,10 +5,15 @@ Eval tasks live in `tasks/`: each is broken code with a failing test.
 
 ## Memory
 
-- At the start of every task, read `memory/INDEX.md`. Open only the memory files
-  the index says are relevant to this task. If none are, open none.
-- Memory is advice, not truth. If a note contradicts the code or a test, trust the
-  code, and record the contradiction with the `record-mistake` skill.
+- Before starting any task, read ALL of `memory/conventions.md`,
+  `memory/past-mistakes.md` and `memory/inbox.md`. This is not optional, and they
+  are short. Rules learned on earlier tasks are about this whole repo, not just the
+  task they came from: they apply to every later task where they fit, even if the
+  task and its test don't mention them.
+- Follow a remembered rule unless the code or a test directly contradicts it. A test
+  that doesn't check something is not a contradiction: keep following the rule.
+- If a rule really is contradicted, trust the code, and record the contradiction
+  with the `record-mistake` skill.
 - Never edit `memory/conventions.md`, `memory/past-mistakes.md` or `memory/INDEX.md`.
   The only memory file you write to is `memory/inbox.md`, by appending.
   The nightly dreaming pass sorts the inbox into the other files.
@@ -32,4 +37,6 @@ Eval tasks live in `tasks/`: each is broken code with a failing test.
 ## Finishing a task
 
 - A task is done when its test passes and `code-reviewer` reports nothing.
-- Before finishing, append anything reusable you learned to `memory/inbox.md`.
+- Before finishing, append anything reusable you learned to `memory/inbox.md`,
+  using the `record-mistake` skill. Write each rule as a general fact about the
+  repo, not as something that happened in this task.
