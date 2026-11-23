@@ -232,7 +232,48 @@ function roundsSection(key, runs, extra, label) {
     <tbody>${rows}${totals}</tbody>
   </table></div>
   <p class="tablenote">Each cell: runs passed, then the round's total time, tokens and cost. The dreaming pass is extra, on top of the memory + dreaming column.</p>
+  ${taskTable(key, meta, runs, rounds)}
 </section>`;
+}
+
+// One row per task: its group, what it depends on, what its hidden tests check, and
+// how many rounds each setup passed it.
+function taskTable(key, meta, runs, rounds) {
+  const list = meta.tasks ? readJson(meta.tasks)?.tasks ?? [] : [];
+  if (!list.length) return "";
+  const short = (id) => id.slice(0, 2);
+  const learnBy = Object.fromEntries(list.filter((t) => t.teaches).map((t) => [t.teaches, t.id]));
+  const needs = (t) => {
+    if (t.group === "learn") return t.teaches ? `teaches ${t.teaches}` : "teaches a rule";
+    if (t.needs) return "needs " + String(t.needs).split(/,\s*/).map((n) => learnBy[n] ? short(learnBy[n]) : n).join(", ");
+    if (t.similar_to) return "needs " + [].concat(t.similar_to).map(short).join(", ");
+    return t.group === "new" ? "no earlier rule" : "unrelated code";
+  };
+  const checks = (t) => {
+    if (!t.hidden_test) return [];
+    const src = (() => { try { return fs.readFileSync(path.join("evals", "hidden", key, t.id, "test_hidden.py"), "utf8"); } catch { return ""; } })();
+    return [...src.matchAll(/def test_(\w+)/g)].map((m) => m[1]).filter((n) => !/still_(right|works)$|^basics$/.test(n)).map((n) => n.replace(/_/g, " "));
+  };
+  const body = list.map((t) => {
+    const ch = checks(t);
+    const cells = SETUPS.map((s) => {
+      const rs = runs.filter((r) => r.setup === s.id && r.task === t.id);
+      if (!rs.length) return "<td>–</td>";
+      const p = rs.filter((r) => r.passed).length;
+      const failed = rs.filter((r) => !r.passed && r.hidden_total > 0);
+      const note = failed.length ? `<small>failed runs: ${(avg(failed.map((r) => r.hidden_passed))).toFixed(1)} of ${failed[0].hidden_total} hidden passed</small>` : "";
+      return `<td class="${p === rs.length ? "ok" : p === 0 ? "bad" : "mid"}">${p}/${rs.length}${note}</td>`;
+    }).join("");
+    const hidden = ch.length ? `<small>Hidden tests check: ${esc(ch.join(", "))}</small>` : "";
+    return `<tr><th scope="row">${esc(short(t.id))} ${esc(t.title)}${hidden}</th><td>${esc(t.group)}<small>${esc(needs(t))}</small></td>${cells}</tr>`;
+  }).join("");
+  const hasHidden = list.some((t) => t.hidden_test);
+  return `<h3 class="sub">Every task</h3>
+  <div class="tablewrap"><table class="tasks">
+    <thead><tr><th scope="col">Task</th><th scope="col">Group</th>${SETUPS.map((s) => `<th scope="col"><span class="swatch s-${s.id}"></span>${esc(s.name)}</th>`).join("")}</tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>
+  <p class="tablenote">Each cell: rounds passed out of ${rounds}. Learning tasks teach a rule; similar tasks need it without naming it; new tasks need no earlier rule; different tasks are unrelated code.${hasHidden ? " Hidden tests are added only after the agent finishes, so it never sees them; the visible test only checks the basic case." : ""}</p>`;
 }
 
 // Runs on the default model are in RUNS_DIR; runs on another model (run-evals.sh
@@ -249,13 +290,17 @@ function load(dir, label) {
   return { suites, rounds };
 }
 const modelDirs = fs.existsSync(path.join(RUNS_DIR, "models")) ? fs.readdirSync(path.join(RUNS_DIR, "models")).filter((m) => /^[\w.-]+$/.test(m)).sort() : [];
-const loaded = [load(RUNS_DIR, null), ...modelDirs.map((m) => load(path.join(RUNS_DIR, "models", m), m))];
+// REPORT_ONLY=<folder under models/> builds a report of that one model or label only.
+const ONLY = process.env.REPORT_ONLY;
+if (ONLY && !modelDirs.includes(ONLY)) { console.error(`No results for ${ONLY} in ${RUNS_DIR}/models.`); process.exit(1); }
+const loaded = ONLY ? [load(path.join(RUNS_DIR, "models", ONLY), ONLY)]
+  : [load(RUNS_DIR, null), ...modelDirs.map((m) => load(path.join(RUNS_DIR, "models", m), m))];
 const bySuite = (a, b) => order.indexOf(a.key) - order.indexOf(b.key);
 // Same task set together, default model first, then the others.
 const suites = loaded.flatMap((l) => l.suites).sort(bySuite);
 const roundSuites = loaded.flatMap((l) => l.rounds).sort(bySuite);
 if (!suites.length && !roundSuites.length) { console.error(`No runs found in ${RUNS_DIR}. Run scripts/run-evals.sh first.`); process.exit(1); }
-const model = readJson(path.join(process.env.PI_CODING_AGENT_DIR || path.join(process.env.HOME || process.env.USERPROFILE || "", ".pi", "agent"), "settings.json"))?.defaultModel;
+const model = readJson(path.join(process.env.PI_CODING_AGENT_DIR || path.join(process.env.HOME || process.env.USERPROFILE || "", ".pi", "agent"), "settings.json"))?.defaultModel || process.env.REPORT_DEFAULT_MODEL || "default model";
 const today = new Date().toISOString().slice(0, 10);
 
 const html = `<!DOCTYPE html>
@@ -305,6 +350,13 @@ section { display: grid; gap: 14px; border-top: 1px solid var(--line); padding-t
 .val { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
 .muted { color: var(--muted); font-weight: 400; }
 .tablewrap { overflow-x: auto; }
+h3.sub { font-size: 17px; margin: 28px 0 8px; }
+table.tasks thead th:first-child { width: 40%; }
+table.tasks thead th:nth-child(2) { width: 12%; }
+table.tasks td.bad { color: #C2410C; font-weight: 600; }
+table.tasks td.mid { color: #B45309; font-weight: 600; }
+table.tasks tr { break-inside: avoid; }
+table.tasks tbody th { text-transform: none; }
 table { border-collapse: collapse; width: 100%; min-width: 560px; table-layout: fixed; font-size: 14px; font-variant-numeric: tabular-nums; }
 thead th:first-child { width: 31%; }
 th, td { text-align: left; padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
