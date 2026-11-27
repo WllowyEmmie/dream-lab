@@ -21,12 +21,17 @@ tasks yourself.
 | one task | `--task <folder name>` |
 | on Haiku, the small model | `--model claude-haiku-5-5` |
 | on Sonnet | `--model claude-sonnet-5-5` |
+| on GPT, ChatGPT, Codex, GPT-6.2 Sol | `--provider openai-codex --model gpt-6.2-sol` |
+| another GPT model, named (Luna, Astra, Terra...) | `--provider openai-codex --model <its id>`, e.g. `gpt-6-luna` |
 | another model, named | `--model <its id>` (ask if unsure which) |
 | with harness v2, a named version | `--label harness-v2` (their name, letters, digits, `-`) |
 
 With `--model`, every Pi call in the run (the tasks, dreaming and the judge) uses
 that model, and its results are kept separate from the default model's. Keep
-the same `--model` on every continuation of that run.
+the same `--model`, `--provider` and `--label` on every continuation of that run.
+Claude models need no `--provider` (it defaults to `claude-bridge`); GPT models
+need `--provider openai-codex`, or every run fails. `pi --list-models` lists the
+ids if the user names one you don't know.
 
 If they don't say which task set, or whether they want rounds, ask once before
 starting. Don't use `--manual`: it waits for a person.
